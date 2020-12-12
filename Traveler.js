@@ -27,16 +27,15 @@ class Traveler {
             delete creep.memory._travel;
             creep.memory._trav = {};
         }
-        if (creep.memory._trav.lastMove === Game.time) return false
+        if (creep.memory._trav.lastMove === Game.time) {
+            return false;
+        }
         //initialize our options
-        const priority = options.priority ? options.priority : 1
-        const range = options.range ? options.range : 1
+        const priority = options.priority ? options.priority : 1;
+        const range = options.range ? options.range : 1;
         destination = this.normalizePos(destination);
-        creep.memory._trav.lastMove = Game.time
-        
-        creep.memory._trav.target = {x: destination.x, y: destination.y, roomName: destination.roomName, range: range, priority: options.priority}
-        
-        
+        creep.memory._trav.lastMove = Game.time;
+        creep.memory._trav.target = {x: destination.x, y: destination.y, roomName: destination.roomName, range: range, priority: options.priority};
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
         if (options.range && rangeToDestination <= options.range) {
@@ -53,7 +52,6 @@ class Traveler {
             }
             return OK;
         }
-        
         let travelData = creep.memory._trav;
         let state = this.deserializeState(travelData, destination);
         // uncomment to visualize destination
@@ -62,8 +60,7 @@ class Traveler {
         if (this.isStuck(creep, state)) {
             state.stuckCount++;
             Traveler.circle(creep.pos, "magenta", state.stuckCount * .2);
-        }
-        else {
+        } else {
             state.stuckCount = 0;
         }
         // handle case where creep is stuck
@@ -81,8 +78,7 @@ class Traveler {
             if (options.movingTarget && state.destination.isNearTo(destination)) {
                 travelData.path += state.destination.getDirectionTo(destination);
                 state.destination = destination;
-            }
-            else {
+            } else {
                 delete travelData.path;
             }
         }
@@ -137,27 +133,25 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
-        
-        
-        if (this.isExit(creep.pos)) return creep.move(nextDirection)
-        const movePosition = this.getPosFromDirection(creep.pos, nextDirection)
+        if (this.isExit(creep.pos) || state.stuckCount === 0) {
+            return creep.move(nextDirection);
+        }
+        const movePosition = this.getPosFromDirection(creep.pos, nextDirection);
         //Find if a creep is blocking our movement
-        const blocker = creep.pos.findInRange(FIND_MY_CREEPS, 1, {filter: c => creep.pos.getDirectionTo(c) === nextDirection})[0]
+        const blocker = creep.pos.findInRange(FIND_MY_CREEPS, 1, {filter: c => creep.pos.getDirectionTo(c) === nextDirection})[0];
         if (blocker) {
             //ignore if fatigued and creeps that have already moved.
             if (!blocker.memory._trav) {
                 //hasn't run yet... Lets swap in case the creep is idle
-                blocker.travelTo(creep.pos) //swap
-            }
-            else if (blocker.fatigue === 0 && (blocker.memory._trav.lastMove < Game.time)) {
-                const blockerPriority = blocker.memory._trav.target.priority
-                const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName)
-                const blockerRange = blocker.memory._trav.target.range
+                blocker.travelTo(creep.pos); //swap
+            } else if (blocker.fatigue === 0 && (blocker.memory._trav.lastMove < Game.time)) {
+                const blockerPriority = blocker.memory._trav.target.priority;
+                const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
+                const blockerRange = blocker.memory._trav.target.range;
                 if (blocker.pos.getRangeTo(blockerTarget) > 1) {
-                    blocker.travelTo(blockerTarget) //push to target
-                }
-                else if (priority > blockerPriority) {
-                    blocker.travelTo(creep.pos) //swap
+                    blocker.travelTo(blockerTarget); //push to target
+                } else if (priority > blockerPriority) {
+                    blocker.travelTo(creep.pos); //swap
                 }
             }
         }
@@ -174,42 +168,40 @@ class Traveler {
         }
         return destination;
     }
-    
     static getPosFromDirection(source, dir) {
         let xoffset = 0
         let yoffset = 0
         switch (dir){
             case TOP:
-                yoffset = 1
+                yoffset = 1;
                 break;
             case TOP_RIGHT:
-                xoffset = 1
-                yoffset = 1
+                xoffset = 1;
+                yoffset = 1;
                 break;
             case RIGHT:
-                xoffset = 1
+                xoffset = 1;
                 break;
             case BOTTOM_RIGHT:
-                xoffset = 1
-                yoffset = -1
+                xoffset = 1;
+                yoffset = -1;
                 break;
             case BOTTOM:
-                yoffset = -1
+                yoffset = -1;
                 break;
             case BOTTOM_LEFT:
-                xoffset = -1
-                yoffset = -1
+                xoffset = -1;
+                yoffset = -1;
                 break;
             case LEFT:
-                xoffset = -1
+                xoffset = -1;
                 break;
             case TOP_LEFT:
-                xoffset = -1
-                yoffset = 1
+                xoffset = -1;
+                yoffset = 1;
                 break;
-            
         }
-        return new RoomPosition(source.x+xoffset, source.y+yoffset, source.roomName)
+        return new RoomPosition(source.x+xoffset, source.y+yoffset, source.roomName);
     }
     /**
      * check if room should be avoided by findRoute algorithm
@@ -253,7 +245,11 @@ class Traveler {
      */
     static circle(pos, color, opacity) {
         new RoomVisual(pos.roomName).circle(pos, {
-            radius: .45, fill: "transparent", stroke: color, strokeWidth: .15, opacity: opacity
+            radius: .45,
+            fill: "transparent",
+            stroke: color,
+            strokeWidth: .15,
+            opacity: opacity
         });
     }
     /**
@@ -267,8 +263,7 @@ class Traveler {
         if (room.controller) {
             if (room.controller.owner && !room.controller.my) {
                 room.memory.avoid = 1;
-            }
-            else {
+            } else {
                 delete room.memory.avoid;
             }
         }
@@ -308,9 +303,7 @@ class Traveler {
                 if (!allowedRooms[roomName]) {
                     return false;
                 }
-            }
-            else if (!options.allowHostile && Traveler.checkAvoid(roomName)
-                && roomName !== destRoomName && roomName !== originRoomName) {
+            } else if (!options.allowHostile && Traveler.checkAvoid(roomName) && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;
             }
             roomsSearched++;
@@ -322,11 +315,9 @@ class Traveler {
                     if (!options.ignoreCreeps) {
                         Traveler.addCreepsToMatrix(room, matrix);
                     }
-                }
-                else if (options.ignoreCreeps || roomName !== originRoomName) {
+                } else if (options.ignoreCreeps || roomName !== originRoomName) {
                     matrix = this.getStructureMatrix(room, options.freshMatrix);
-                }
-                else {
+                } else {
                     matrix = this.getCreepMatrix(room);
                 }
                 if (options.obstacles) {
@@ -350,12 +341,15 @@ class Traveler {
             }
             return matrix;
         };
-        let ret = PathFinder.search(origin, { pos: destination, range: options.range }, {
+        let ret = PathFinder.search(origin, {
+            pos: destination,
+            range: options.range
+        }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
             plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : 2,
             swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : 10,
-            roomCallback: callback,
+            roomCallback: callback
         });
         if (ret.incomplete && options.ensurePath) {
             if (options.useFindRoute === undefined) {
@@ -371,9 +365,7 @@ class Traveler {
                     return ret;
                 }
                 // TODO: handle case where a wall or some other obstacle is blocking the exit assumed by findRoute
-            }
-            else {
-            }
+            } else {}
         }
         return ret;
     }
@@ -386,7 +378,7 @@ class Traveler {
      */
     static findRoute(origin, destination, options = {}) {
         let restrictDistance = options.restrictDistance || Game.map.getRoomLinearDistance(origin, destination) + 10;
-        let allowedRooms = { [origin]: true, [destination]: true };
+        let allowedRooms = {[origin]: true, [destination]: true};
         let highwayBias = 1;
         if (options.preferHighway) {
             highwayBias = 2.5;
@@ -407,8 +399,7 @@ class Traveler {
                     // room is too far out of the way
                     return Number.POSITIVE_INFINITY;
                 }
-                if (!options.allowHostile && Traveler.checkAvoid(roomName) &&
-                    roomName !== destination && roomName !== origin) {
+                if (!options.allowHostile && Traveler.checkAvoid(roomName) && roomName !== destination && roomName !== origin) {
                     // room is marked as "avoid" in room memory
                     return Number.POSITIVE_INFINITY;
                 }
@@ -427,9 +418,7 @@ class Traveler {
                     }
                     let fMod = parsed[1] % 10;
                     let sMod = parsed[2] % 10;
-                    let isSK = !(fMod === 5 && sMod === 5) &&
-                        ((fMod >= 4) && (fMod <= 6)) &&
-                        ((sMod >= 4) && (sMod <= 6));
+                    let isSK = !(fMod === 5 && sMod === 5) && ((fMod >= 4) && (fMod <= 6)) && ((sMod >= 4) && (sMod <= 6));
                     if (isSK) {
                         return 10 * highwayBias;
                     }
@@ -502,14 +491,11 @@ class Traveler {
                 if (!structure.my && !structure.isPublic) {
                     impassibleStructures.push(structure);
                 }
-            }
-            else if (structure instanceof StructureRoad) {
+            } else if (structure instanceof StructureRoad) {
                 matrix.set(structure.pos.x, structure.pos.y, roadCost);
-            }
-            else if (structure instanceof StructureContainer) {
+            } else if (structure instanceof StructureContainer) {
                 matrix.set(structure.pos.x, structure.pos.y, 5);
-            }
-            else {
+            } else {
                 impassibleStructures.push(structure);
             }
         }
@@ -523,18 +509,18 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
-        
-        /*for (let x = 0; x < 50; x+=49) {
+        /*
+        for (let x = 0; x < 50; x+=49) {
             for (let y = 0; y < 50; y++) {
-                matrix.set(x, y, 100)
+                matrix.set(x, y, 100);
             }
         }
-        
         for (let y = 0; y < 50; y+=49) {
             for (let x = 0; x < 50; x++) {
-                matrix.set(x, y, 100)
+                matrix.set(x, y, 100);
             }
-        }*/
+        }
+        */
         return matrix;
     }
     /**
@@ -560,8 +546,7 @@ class Traveler {
         this.circle(startPos, color);
         for (let position of path) {
             if (position.roomName === lastPosition.roomName) {
-                new RoomVisual(position.roomName)
-                    .line(position, lastPosition, { color: color, lineStyle: "dashed" });
+                new RoomVisual(position.roomName).line(position, lastPosition, {color: color, lineStyle: "dashed"});
                 serializedPath += lastPosition.getDirectionTo(position);
             }
             lastPosition = position;
@@ -620,16 +605,14 @@ class Traveler {
             state.cpu = travelData.state[STATE_CPU];
             state.stuckCount = travelData.state[STATE_STUCK];
             state.destination = new RoomPosition(travelData.state[STATE_DEST_X], travelData.state[STATE_DEST_Y], travelData.state[STATE_DEST_ROOMNAME]);
-        }
-        else {
+        } else {
             state.cpu = 0;
             state.destination = destination;
         }
         return state;
     }
     static serializeState(creep, destination, state, travelData) {
-        travelData.state = [creep.pos.x, creep.pos.y, state.stuckCount, state.cpu, destination.x, destination.y,
-            destination.roomName];
+        travelData.state = [creep.pos.x, creep.pos.y, state.stuckCount, state.cpu, destination.x, destination.y, destination.roomName];
     }
     static isStuck(creep, state) {
         let stuck = false;
@@ -662,86 +645,80 @@ const STATE_DEST_X = 4;
 const STATE_DEST_Y = 5;
 const STATE_DEST_ROOMNAME = 6;
 // assigns a function to Creep.prototype: creep.travelTo(destination)
-Creep.prototype.travelTo = function (destination, options) {
+Creep.prototype.travelTo = (function(destination, options) {
     return Traveler.travelTo(this, destination, options);
-};
-
-//adds the range into the movement for easier calls.
-Creep.prototype.MoveToRange = function (destination, r, options) {
-    return this.Move(destination, {range: r}, options)
-}
-
+});
+// adds the range into the movement for easier calls.
+Creep.prototype.MoveToRange = (function(destination, r, options) {
+    return this.Move(destination, {range: r}, options);
+});
 PowerCreep.prototype.travelTo = Creep.prototype.travelTo
-
-//call this in every room to update it's status
-Room.prototype.UpdateRoomStatus = function () {
+// call this in every room to update it's status
+Room.prototype.UpdateRoomStatus = (function() {
     Traveler.updateRoomStatus(this);
-}
-
-//Get a path to a destiniation... Good for building roads.
-RoomPosition.prototype.FindPathTo = function (destination, options) {
-    let ret = Traveler.findTravelPath(this, destination, options)
-    return ret.path
-}
-
-//Get the route distance to a room instead of linear distance
-Room.prototype.GetDistanceToRoom = function (destination) {
-    return Traveler.routeDistance(this.name, destination)
-}
-
-//Moves to a target
-//Add you own code here to interface with traveler
-Creep.prototype.Move = function (target, opts) {
-    if (this.getActiveBodyparts(MOVE) === 0) return false
-    
-    if (!target) return false
-    let result
+});
+// Get a path to a destiniation... Good for building roads.
+RoomPosition.prototype.FindPathTo = (function(destination, options) {
+    let ret = Traveler.findTravelPath(this, destination, options);
+    return ret.path;
+});
+// Get the route distance to a room instead of linear distance
+Room.prototype.GetDistanceToRoom = (function(destination) {
+    return Traveler.routeDistance(this.name, destination);
+});
+// Moves to a target
+// Add you own code here to interface with traveler
+Creep.prototype.Move = (function(target, opts) {
+    if (this.getActiveBodyparts(MOVE) === 0) {
+        return false;
+    }
+    if (!target) {
+        return false;
+    }
+    let result;
     if (opts) {
-        result = this.travelTo(target,opts)
+        result = this.travelTo(target,opts);
     } else {
         if (target.pos && target.pos.roomName !== this.room.name) {
-            result = this.travelTo(target, {preferHighway: true, ensurePath: true, useFindRoute: true})
+            result = this.travelTo(target, {preferHighway: true, ensurePath: true, useFindRoute: true});
         } else {
-            result = this.travelTo(target)
+            result = this.travelTo(target);
         }
     }
-    
-    return result === OK
-}; 
-
-
-//Move a creep off road... Good for building and repairing.... Shitty for CPU
-//I'll take suggestions on CPU performance if anyone has them
-Creep.prototype.MoveOffRoad = function (target, dist) {
-    //see if we are offroad
-    if (!_.some(this.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) return true
-    
-    //if not find an offroad post towards the target
+    return result === OK;
+}); 
+// Move a creep off road... Good for building and repairing.... Shitty for CPU
+// I'll take suggestions on CPU performance if anyone has them
+Creep.prototype.MoveOffRoad = (function(target, dist) {
+    // see if we are offroad
+    if (!_.some(this.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) {
+        return true;
+    }
+    // if not find an offroad post towards the target
     const positions = [];
-    //load offset positions that it could move to within the set range
-    let offsets = []
-    for (let x = -dist; x <= dist; x++) offsets.push(x) //ah, push it
-    
-    const t = new Room.Terrain(this.room.name) //load up the rooms terrain
-    
-    //find each valid position around the target that does not have a road
+    // load offset positions that it could move to within the set range
+    let offsets = [];
+    for (let x = -dist; x <= dist; x++) {
+        offsets.push(x); // ah, push it
+    }
+    const t = new Room.Terrain(this.room.name); // load up the rooms terrain
+    // find each valid position around the target that does not have a road
     _.forEach(offsets, (x) => _.forEach(offsets, (y) => {
-        //make sure the position is within the room and not an exit tile
+        // make sure the position is within the room and not an exit tile
         if (this.pos.x + x < 49 && this.pos.y + y < 49 && this.pos.x + x > 0 && this.pos.y + y > 0) {
-            
-            const p = new RoomPosition(this.pos.x + x, this.pos.y + y, this.pos.roomName); //New room position to check
-            
-            if (!_.some(p.lookFor(LOOK_STRUCTURES))//move off of all structures
-            && !_.some(p.lookFor(LOOK_CONSTRUCTION_SITES))//no construction sites
-            && t.get(p.x,p.y) !== TERRAIN_MASK_WALL) positions.push(p); //Push the valid location (no wall terrain)
+            const p = new RoomPosition(this.pos.x + x, this.pos.y + y, this.pos.roomName); // New room position to check
+            if (!_.some(p.lookFor(LOOK_STRUCTURES)) // move off of all structures
+            && !_.some(p.lookFor(LOOK_CONSTRUCTION_SITES)) // no construction sites
+            && t.get(p.x,p.y) !== TERRAIN_MASK_WALL) { // no wall terrain
+                positions.push(p); //Push the valid location
+            }
         }
     }));
-    
-    //make sure the position is towards the target and there is no creeps
-    const validPositions = _.filter(positions, 
-        (rp) => rp.getRangeTo(target) <= this.pos.getRangeTo(target) && rp.lookFor(LOOK_CREEPS).length === 0);
-        
-    if (validPositions.length === 0) return this.Move(target); //no positions, move towards the target to make room for people behind them
-    let posit = this.pos.findClosestByPath(validPositions) //find the closest position to the creep
-    return this.Move(posit); //move to that position
-}
+    // make sure the position is towards the target and there is no creeps
+    const validPositions = _.filter(positions, (rp) => rp.getRangeTo(target) <= this.pos.getRangeTo(target) && rp.lookFor(LOOK_CREEPS).length === 0);
+    if (validPositions.length === 0) {
+        return this.Move(target); // no positions, move towards the target to make room for people behind them
+    }
+    let posit = this.pos.findClosestByPath(validPositions); // find the closest position to the creep
+    return this.Move(posit); // move to that position
+});
