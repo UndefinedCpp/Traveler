@@ -9,6 +9,7 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 * Effective [long-range pathing](https://github.com/bonzaiferroni/bonzAI/wiki/Improving-on-moveTo's-efficiency#very-long-distances-path-length-1200) 
 * [Lots of options](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API)
 * [Visuals](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler:-Features#show-your-path)
+* [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Pass {priority: xx} in options.
 
 ## Installation
 
@@ -34,6 +35,13 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+
+2019-12-12
+* Added swapping and pushing of creeps in the way. Pass {priority: number} to traveler (default is 1) to utilize swapping. If a creep is a higher priority, it will swap with the creep in the movement direction.
+* Traveler keeps track of when the last move was. This is used for the above logic.
+* Added function for moving a creep offroad when working on a target. Use creep.MoveOffRoad(target, distance). WARNING: this is not a CPU friendly task.
+* Added PowerCreep support for traveler 
+* Other various quality of life functions
 
 2017-06-26
 * Reorganized type definitions into index.d.ts

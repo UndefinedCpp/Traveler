@@ -22,7 +22,21 @@ class Traveler {
             Traveler.circle(creep.pos, "aqua", .3);
             return ERR_TIRED;
         }
+        // initialize data object
+        if (!creep.memory._trav) {
+            delete creep.memory._travel;
+            creep.memory._trav = {};
+        }
+        if (creep.memory._trav.lastMove === Game.time) return false
+        //initialize our options
+        const priority = options.priority ? options.priority : 1
+        const range = options.range ? options.range : 1
         destination = this.normalizePos(destination);
+        creep.memory._trav.lastMove = Game.time
+        
+        creep.memory._trav.target = {x: destination.x, y: destination.y, roomName: destination.roomName, range: range, priority: options.priority}
+        
+        
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
         if (options.range && rangeToDestination <= options.range) {
@@ -39,11 +53,7 @@ class Traveler {
             }
             return OK;
         }
-        // initialize data object
-        if (!creep.memory._trav) {
-            delete creep.memory._travel;
-            creep.memory._trav = {};
-        }
+        
         let travelData = creep.memory._trav;
         let state = this.deserializeState(travelData, destination);
         // uncomment to visualize destination
@@ -127,6 +137,30 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
+        
+        
+        if (this.isExit(creep.pos)) return creep.move(nextDirection)
+        const movePosition = this.getPosFromDirection(creep.pos, nextDirection)
+        //Find if a creep is blocking our movement
+        const blocker = creep.pos.findInRange(FIND_MY_CREEPS, 1, {filter: c => creep.pos.getDirectionTo(c) === nextDirection})[0]
+        if (blocker) {
+            //ignore if fatigued and creeps that have already moved.
+            if (!blocker.memory._trav) {
+                //hasn't run yet... Lets swap in case the creep is idle
+                blocker.travelTo(creep.pos) //swap
+            }
+            else if (blocker.fatigue === 0 && (blocker.memory._trav.lastMove < Game.time)) {
+                const blockerPriority = blocker.memory._trav.target.priority
+                const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName)
+                const blockerRange = blocker.memory._trav.target.range
+                if (blocker.pos.getRangeTo(blockerTarget) > 1) {
+                    blocker.travelTo(blockerTarget) //push to target
+                }
+                else if (priority > blockerPriority) {
+                    blocker.travelTo(creep.pos) //swap
+                }
+            }
+        }
         return creep.move(nextDirection);
     }
     /**
@@ -139,6 +173,43 @@ class Traveler {
             return destination.pos;
         }
         return destination;
+    }
+    
+    static getPosFromDirection(source, dir) {
+        let xoffset = 0
+        let yoffset = 0
+        switch (dir){
+            case TOP:
+                yoffset = 1
+                break;
+            case TOP_RIGHT:
+                xoffset = 1
+                yoffset = 1
+                break;
+            case RIGHT:
+                xoffset = 1
+                break;
+            case BOTTOM_RIGHT:
+                xoffset = 1
+                yoffset = -1
+                break;
+            case BOTTOM:
+                yoffset = -1
+                break;
+            case BOTTOM_LEFT:
+                xoffset = -1
+                yoffset = -1
+                break;
+            case LEFT:
+                xoffset = -1
+                break;
+            case TOP_LEFT:
+                xoffset = -1
+                yoffset = 1
+                break;
+            
+        }
+        return new RoomPosition(source.x+xoffset, source.y+yoffset, source.roomName)
     }
     /**
      * check if room should be avoided by findRoute algorithm
@@ -452,6 +523,18 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
+        
+        /*for (let x = 0; x < 50; x+=49) {
+            for (let y = 0; y < 50; y++) {
+                matrix.set(x, y, 100)
+            }
+        }
+        
+        for (let y = 0; y < 50; y+=49) {
+            for (let x = 0; x < 50; x++) {
+                matrix.set(x, y, 100)
+            }
+        }*/
         return matrix;
     }
     /**
@@ -582,3 +665,83 @@ const STATE_DEST_ROOMNAME = 6;
 Creep.prototype.travelTo = function (destination, options) {
     return Traveler.travelTo(this, destination, options);
 };
+
+//adds the range into the movement for easier calls.
+Creep.prototype.MoveToRange = function (destination, r, options) {
+    return this.Move(destination, {range: r}, options)
+}
+
+PowerCreep.prototype.travelTo = Creep.prototype.travelTo
+
+//call this in every room to update it's status
+Room.prototype.UpdateRoomStatus = function () {
+    Traveler.updateRoomStatus(this);
+}
+
+//Get a path to a destiniation... Good for building roads.
+RoomPosition.prototype.FindPathTo = function (destination, options) {
+    let ret = Traveler.findTravelPath(this, destination, options)
+    return ret.path
+}
+
+//Get the route distance to a room instead of linear distance
+Room.prototype.GetDistanceToRoom = function (destination) {
+    return Traveler.routeDistance(this.name, destination)
+}
+
+//Moves to a target
+//Add you own code here to interface with traveler
+Creep.prototype.Move = function (target, opts) {
+    if (this.getActiveBodyparts(MOVE) === 0) return false
+    
+    if (!target) return false
+    let result
+    if (opts) {
+        result = this.travelTo(target,opts)
+    } else {
+        if (target.pos && target.pos.roomName !== this.room.name) {
+            result = this.travelTo(target, {preferHighway: true, ensurePath: true, useFindRoute: true})
+        } else {
+            result = this.travelTo(target)
+        }
+    }
+    
+    return result === OK
+}; 
+
+
+//Move a creep off road... Good for building and repairing.... Shitty for CPU
+//I'll take suggestions on CPU performance if anyone has them
+Creep.prototype.MoveOffRoad = function (target, dist) {
+    //see if we are offroad
+    if (!_.some(this.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) return true
+    
+    //if not find an offroad post towards the target
+    const positions = [];
+    //load offset positions that it could move to within the set range
+    let offsets = []
+    for (let x = -dist; x <= dist; x++) offsets.push(x) //ah, push it
+    
+    const t = new Room.Terrain(this.room.name) //load up the rooms terrain
+    
+    //find each valid position around the target that does not have a road
+    _.forEach(offsets, (x) => _.forEach(offsets, (y) => {
+        //make sure the position is within the room and not an exit tile
+        if (this.pos.x + x < 49 && this.pos.y + y < 49 && this.pos.x + x > 0 && this.pos.y + y > 0) {
+            
+            const p = new RoomPosition(this.pos.x + x, this.pos.y + y, this.pos.roomName); //New room position to check
+            
+            if (!_.some(p.lookFor(LOOK_STRUCTURES))//move off of all structures
+            && !_.some(p.lookFor(LOOK_CONSTRUCTION_SITES))//no construction sites
+            && t.get(p.x,p.y) !== TERRAIN_MASK_WALL) positions.push(p); //Push the valid location (no wall terrain)
+        }
+    }));
+    
+    //make sure the position is towards the target and there is no creeps
+    const validPositions = _.filter(positions, 
+        (rp) => rp.getRangeTo(target) <= this.pos.getRangeTo(target) && rp.lookFor(LOOK_CREEPS).length === 0);
+        
+    if (validPositions.length === 0) return this.Move(target); //no positions, move towards the target to make room for people behind them
+    let posit = this.pos.findClosestByPath(validPositions) //find the closest position to the creep
+    return this.Move(posit); //move to that position
+}
