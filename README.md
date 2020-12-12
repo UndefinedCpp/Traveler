@@ -42,6 +42,7 @@ The file itself has comments, and you can also find documentation [in the wiki](
 * Added function for moving a creep offroad when working on a target. Use creep.MoveOffRoad(target, distance). WARNING: this is not a CPU friendly task.
 * Added PowerCreep support for traveler 
 * Other various quality of life functions
+* Code cleaned up by MistySenpai. Thanks!
 
 2017-06-26
 * Reorganized type definitions into index.d.ts
