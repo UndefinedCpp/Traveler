@@ -1,7 +1,7 @@
 # Traveler
 
 Traveler is a general-purpose tool for moving your creeps around. Feel free to fork and use in other projects.
-
+- TypeScript is not updated. Please feel free to push it to me.
 #### Features:
 * Efficient path-caching and CPU-use (you can see how it compares with `creep.moveTo()` [here](https://github.com/bonzaiferroni/bonzAI/wiki/Improving-on-moveTo's-efficiency))
 * Ignores creeps in pathing by default which allows for fewer PathFinder calls and [single-lane creep movement](https://github.com/bonzaiferroni/screepswiki/blob/master/gifs/s33-moveTo.gif)
@@ -29,6 +29,9 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 #### Performance considerations
 1. `travelTo` creates a new object in creep memory, `_trav`, which is analogous to the object used by `moveTo()` for caching the creeps path. For this reason, it will save memory to use either `travelTo()` or `moveTo()` with a given creep, but not both.
 2. As with any algorithm where creeps aren't a consideration for pathing by default, you'll have best results when their path has a low chance of including immobile creeps. My creeps rarely reach the "stuck threshold" because I take extra considerations to keep the roads clear.
+
+## WishList
+* Considerations for the number of move/boosted move parts and automatically take them into account when calculating fatigue over swamps and plains.
 
 ## Documentation
 
