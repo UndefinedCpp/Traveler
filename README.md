@@ -31,7 +31,7 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 2. As with any algorithm where creeps aren't a consideration for pathing by default, you'll have best results when their path has a low chance of including immobile creeps. My creeps rarely reach the "stuck threshold" because I take extra considerations to keep the roads clear.
 
 ## WishList
-* Considerations for the number of move/boosted move parts and automatically take them into account when calculating fatigue over swamps and plains.
+* Optimization for recursive push. Currently creeps will only push towards a target and not another open space near the target. Working on balancing this aspect with CPU usage
 
 ## Documentation
 
@@ -39,36 +39,16 @@ The file itself has comments, and you can also find documentation [in the wiki](
 
 ## Changelog
 
-2019-12-12
+2020-12-13
+* Recursive push added. Creeps will send a 'push' option to one another to force a move.
+* CPU optimization in push logic. Travel will now wait 1 tick prior to push and use significantly less CPU.
+* Traveler will now automatically look at a creeps body composition and determine if it can ignore roads and use swamps without fatigue.
+
+2020-12-12
+* Initial build of this fork
 * Added swapping and pushing of creeps in the way. Pass {priority: number} to traveler (default is 1) to utilize swapping. If a creep is a higher priority, it will swap with the creep in the movement direction.
 * Traveler keeps track of when the last move was. This is used for the above logic.
 * Added function for moving a creep offroad when working on a target. Use creep.MoveOffRoad(target, distance). WARNING: this is not a CPU friendly task.
 * Added PowerCreep support for traveler 
 * Other various quality of life functions
 * Code cleaned up by MistySenpai. Thanks!
-
-2017-06-26
-* Reorganized type definitions into index.d.ts
-* Fixed bug where public ramparts were not seen as pathable
-* Fixed bug that caused exceptions due to non-existant Memory.rooms
-
-2017-06-16
-* Fixed bug that caused options.preferHighway to not prefer highways
-
-2017-06-05
-* Fixed bug in the commented line of code that registered whether creeps were in a hostile room or not.
-* New version of Traveler! See what is different [here](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler). The old version can still be found [here](https://github.com/bonzaiferroni/bonzAI/wiki/Traveler-API).
-
-2017-03-10
-* Fixed a bug where public ramparts were not set as valid positions for pathing in the costmatrix (thanks ricane!)
-
-2017-03-06
-* Fixed a bug where pathfinder gets needlessly called when using `options.range` (thanks helam!)
-
-2017-01-17
-* Fixed bug in code that determines whether a room is SK from roomname
-
-2017-01-15
-* Eliminated option `returnPosition` and added `returnData`
-* Fixed bug where preferHighway would not produce the intended results
-* Fixed bug where ignoreCreep behavior was reversed and creeps could not get unstuck 

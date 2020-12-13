@@ -36,6 +36,12 @@ class Traveler {
         destination = this.normalizePos(destination);
         creep.memory._trav.lastMove = Game.time;
         creep.memory._trav.target = {x: destination.x, y: destination.y, roomName: destination.roomName, range: range, priority: options.priority};
+        
+        //get body movement Efficiency and adjust options automatically
+        const muscle = this.getCreepMoveEfficiency(creep)
+        if (muscle > 2) options.ignoreRoads = true
+        if (muscle > 10) options.offRoad = true
+        
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
         if (options.range && rangeToDestination <= options.range) {
@@ -66,6 +72,9 @@ class Traveler {
         // handle case where creep is stuck
         if (!options.stuckValue) {
             options.stuckValue = DEFAULT_STUCK_VALUE;
+        }
+        if (!options.push) {
+            options.push = false
         }
         if (state.stuckCount >= options.stuckValue && Math.random() > .5) {
             options.ignoreCreeps = false;
@@ -133,7 +142,7 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
-        if (this.isExit(creep.pos) || state.stuckCount === 0) {
+        if (this.isExit(creep.pos) || (state.stuckCount === 0 && !options.push)) {
             return creep.move(nextDirection);
         }
         const movePosition = this.getPosFromDirection(creep.pos, nextDirection);
@@ -149,10 +158,14 @@ class Traveler {
                 const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
                 const blockerRange = blocker.memory._trav.target.range;
                 if (blocker.pos.getRangeTo(blockerTarget) > 1) {
-                    blocker.travelTo(blockerTarget); //push to target
+                    blocker.travelTo(blockerTarget, {push: true}); //push to target
                 } else if (priority > blockerPriority) {
-                    blocker.travelTo(creep.pos); //swap
+                    blocker.travelTo(creep.pos, {range: 0}); //swap
+                } else {
+                    travelData.state[2] = 999 //artificially set it to stuck and repath
                 }
+            } else {
+                travelData.state[2] = 999 //artificially set it to stuck and repath
             }
         }
         return creep.move(nextDirection);
@@ -167,6 +180,30 @@ class Traveler {
             return destination.pos;
         }
         return destination;
+    }
+    static getCreepMoveEfficiency(creep) {
+        if (creep instanceof PowerCreep) return 9999 //no fatgiue!
+        let totalreduction= 0
+        let totalparts = 0
+        let used = creep.store.getUsedCapacity()
+        creep.body.forEach(b => {
+            switch(b.type) {
+                case MOVE:
+                    totalreduction += b.hits > 0 ? b.boost ? (BOOSTS[b.type][b.boost].fatigue * -2) : -2 : 0
+                    return
+                    break;
+                case CARRY:
+                    if (used > 0 && b.hits > 0) {
+                        used -= b.boost ? (BOOSTS[b.type][b.boost].capacity * CARRY_CAPACITY) : CARRY_CAPACITY
+                        totalparts += 1
+                    }
+                    break;
+                default:
+                    totalparts += 1
+                    break;
+            }
+        })
+        return totalparts > 0 ? totalreduction/totalparts : totalreduction
     }
     static getPosFromDirection(source, dir) {
         let xoffset = 0
