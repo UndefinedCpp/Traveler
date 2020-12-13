@@ -152,8 +152,8 @@ class Traveler {
             //ignore if fatigued and creeps that have already moved.
             if (!blocker.memory._trav) {
                 //hasn't run yet... Lets swap in case the creep is idle
-                blocker.travelTo(creep.pos); //swap
-            } else if (blocker.fatigue === 0 && (blocker.memory._trav.lastMove < Game.time)) {
+                blocker.travelTo(creep.pos, {range: 0}); //swap
+            } else if (!blocker.fatigue && (blocker.memory._trav.lastMove < Game.time)) {
                 const blockerPriority = blocker.memory._trav.target.priority;
                 const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
                 const blockerRange = blocker.memory._trav.target.range;

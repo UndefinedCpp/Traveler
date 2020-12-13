@@ -43,6 +43,7 @@ The file itself has comments, and you can also find documentation [in the wiki](
 * Recursive push added. Creeps will send a 'push' option to one another to force a move.
 * CPU optimization in push logic. Travel will now wait 1 tick prior to push and use significantly less CPU.
 * Traveler will now automatically look at a creeps body composition and determine if it can ignore roads and use swamps without fatigue.
+* Bug fix from u.283 involving power creeps. Thanks! If we are ever in prison together, I will watch your back in the shower.
 
 2020-12-12
 * Initial build of this fork
