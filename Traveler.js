@@ -1,9 +1,5 @@
-/**
- * To start using Traveler, require it in main.js:
- * Example: var Traveler = require('Traveler.js');
- */
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+Object.defineProperty(exports, "__esModule", {value: true});
 class Traveler {
     /**
      * move creep to destination
@@ -30,16 +26,16 @@ class Traveler {
         if (creep.memory._trav.lastMove === Game.time) {
             return false;
         }
-        creep.memory._trav.lastMove = Game.time
+        creep.memory._trav.lastMove = Game.time;
         //initialize our options
         const range = options.range ? options.range : 1;
         const priority = options.priority ? options.priority : 1;
         destination = this.normalizePos(destination);
         
         //get body movement Efficiency and adjust options automatically
-        const muscle = this.getCreepMoveEfficiency(creep)
-        if (muscle > 2) options.ignoreRoads = true
-        if (muscle > 10) options.offRoad = true
+        const muscle = this.getCreepMoveEfficiency(creep);
+        if (muscle > 2) options.ignoreRoads = true;
+        if (muscle > 10) options.offRoad = true;
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
@@ -73,7 +69,7 @@ class Traveler {
             options.stuckValue = DEFAULT_STUCK_VALUE;
         }
         if (!options.push) {
-            options.push = false
+            options.push = false;
         }
         if (state.stuckCount >= options.stuckValue && Math.random() > .5) {
             options.ignoreCreeps = false;
@@ -156,7 +152,7 @@ class Traveler {
                 const blockerPriority = blocker.memory._trav.target.priority;
                 const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
                 const blockerRange = blocker.memory._trav.target.range;
-                const currentRange = blocker.pos.getRangeTo(blockerTarget)
+                const currentRange = blocker.pos.getRangeTo(blockerTarget);
                 //Can we move closer?
                 if (currentRange > 1) {
                     this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: 1}); //push to target
@@ -167,26 +163,25 @@ class Traveler {
                     } else {
                         if (blockerRange !== 0) {
                             //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
-                            let count = Game.cpu.getUsed()
-                            const newPosition = this.findNewFreePosition(blocker, blockerTarget)
+                            let count = Game.cpu.getUsed();
+                            const newPosition = this.findNewFreePosition(blocker, blockerTarget);
                             if (newPosition) {
-                                blocker.Move(newPosition, 0, 10) //move to the free position
+                                blocker.Move(newPosition, 0, 10); //move to the free position
                             } else {
-                                travelData.state[2] = 999 //artificially set it to stuck and repath
-                                return ERR_NO_PATH
+                                travelData.state[2] = 999; //artificially set it to stuck and repath
+                                return ERR_NO_PATH;
                             }
                         } else {
-                            travelData.state[2] = 999 //artificially set it to stuck and repath
-                            return ERR_NO_PATH
+                            travelData.state[2] = 999; //artificially set it to stuck and repath
+                            return ERR_NO_PATH;
                         }
                     }
                 }
             } else {
-                travelData.state[2] = 999 //artificially set it to stuck and repath
-                return ERR_NO_PATH
+                travelData.state[2] = 999; //artificially set it to stuck and repath
+                return ERR_NO_PATH;
             }
-            delete creep.memory._trav.path
-            
+            delete creep.memory._trav.path;
         }
         return creep.move(nextDirection);
     }
@@ -202,65 +197,68 @@ class Traveler {
         return destination;
     }
     static registerTarget(creep, target, range, priority) {
-        if (!target) return
-        if (!creep) return
-        if (target.pos) target = target.pos
-        if (!range) range = 1
-        if (!priority) priority = 1
-        if (!creep.memory._trav) creep.memory._trav = {}
+        if (!target) return;
+        if (!creep) return;
+        if (target.pos) target = target.pos;
+        if (!range) range = 1;
+        if (!priority) priority = 1;
+        if (!creep.memory._trav) creep.memory._trav = {};
         creep.memory._trav.target = {x: target.x, y: target.y, roomName: target.roomName, range: range, priority: priority};
     }
-    
     static GetXFromDirection(dir, sp) {
-    
         return dir === LEFT || dir === TOP_LEFT || dir === BOTTOM_LEFT ?
-        sp - 1 : dir === RIGHT || dir === TOP_RIGHT || dir === BOTTOM_RIGHT ?
-        sp + 1 : sp
+            sp - 1
+            :
+            dir === RIGHT || dir === TOP_RIGHT || dir === BOTTOM_RIGHT ?
+                sp + 1
+                :
+                sp;
     }
-
     static GetYFromDirection(dir, sp) {
-        return dir === TOP || dir === TOP_LEFT || dir === TOP_RIGHT ? 
-        sp - 1 : dir === BOTTOM || dir === BOTTOM_LEFT || dir === BOTTOM_RIGHT ? 
-        sp + 1 : sp
+        return dir === TOP || dir === TOP_LEFT || dir === TOP_RIGHT ?
+            sp - 1
+            :
+            dir === BOTTOM || dir === BOTTOM_LEFT || dir === BOTTOM_RIGHT ?
+                sp + 1
+                :
+                sp;
     }
-    
     static findNewFreePosition(creep, target) {
-        let direction = creep.pos.getDirectionTo(target)//get direction to target
+        let direction = creep.pos.getDirectionTo(target);//get direction to target
         let positions = []; //hold positions we can move to
-        let offsets = {}
-        let curDirection
+        let offsets = {};
+        let curDirection;
         switch(direction) {
             case TOP:
             case LEFT:
             case RIGHT:
             case BOTTOM:
-                curDirection = direction -3
-                if (curDirection < 1) curDirection += 8
+                curDirection = direction -3;
+                if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 5; i++){
                     if (i === 2) curDirection; //don't move to the target
-                    if (curDirection > 8) curDirection -= 8
-                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)}
-                    curDirection += 1
+                    if (curDirection > 8) curDirection -= 8;
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
+                    curDirection += 1;
                 }
                 break;
             case TOP_RIGHT:
             case BOTTOM_RIGHT:
             case BOTTOM_LEFT:
             case TOP_LEFT:
-                curDirection = direction -2
-                if (curDirection < 1) curDirection += 8
+                curDirection = direction -2;
+                if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 3; i++){
                     if (i === 1) curDirection; //don't move to the target
-                    if (curDirection > 8) curDirection -= 8
-                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)}
-                    curDirection += 1
+                    if (curDirection > 8) curDirection -= 8;
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
+                    curDirection += 1;
                 }
                 break;
         }
-        
         const t = new Room.Terrain(creep.room.name);
-        const structureMatrix = this.getStructureMatrix(creep.room, false)
-        const creepMatrix = this.getCreepMatrix(creep.room, false)
+        const structureMatrix = this.getStructureMatrix(creep.room, false);
+        const creepMatrix = this.getCreepMatrix(creep.room, false);
         for (let o in offsets) {
             //Out of bounds/exit
             if (offsets[o].x <= 0 || offsets[o].x >= 49 || offsets[o].y <= 0 || offsets[o].y >= 49) {
@@ -268,33 +266,28 @@ class Traveler {
             }
             //don't try to move on a wall.
             if (t.get(offsets[o].x,offsets[o].y) === TERRAIN_MASK_WALL) {
-                continue
+                continue;
             }
-            
             if (structureMatrix.get(offsets[o].x, offsets[o].y) <= 10 // No impassable structures
             && creepMatrix.get(offsets[o].x, offsets[o].y) < 255) { //no creep there
-                return new RoomPosition(offsets[o].x, offsets[o].y, creep.room.name)
+                return new RoomPosition(offsets[o].x, offsets[o].y, creep.room.name);
             }
         }
-        
-        return 
+        return;
     }
-    
     static moveOffRoad(creep, targetpos, distance, priority) {
         if (!creep.memory._trav) {
-            creep.memory._trav = {}
+            creep.memory._trav = {};
         }
         if (!creep.memory._trav.offroad) {
-            creep.memory._trav.offroad = 0
+            creep.memory._trav.offroad = 0;
         }
         if (creep.memory._trav.lastMove === Game.time) {
-            return false
+            return false;
         }
-        
         if (creep.memory._trav.offroad > Game.time - 20) {
-            return false
+            return false;
         }
-        
         // see if we are offroad
         if (!_.some(creep.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) {
             return true;
@@ -309,8 +302,8 @@ class Traveler {
         }
         // find each valid position around the target that does not have a road
         _.forEach(offsets, (x) => _.forEach(offsets, (y) => {
-            let xpos = targetpos.x + x 
-            let ypos = targetpos.y + y
+            let xpos = targetpos.x + x ;
+            let ypos = targetpos.y + y;
             //not out of bounds/exit
             if (!(xpos <= 0 || xpos >= 49 || ypos <= 0 || ypos >= 49)) {
                 if (t.get(x,y) !== TERRAIN_MASK_WALL//don't try to move on a wall.
@@ -321,40 +314,40 @@ class Traveler {
             }
         }));
         if (_.size(positions) === 0) {
-            creep.memory._trav.offroad = Game.time //don't spam this function if it fails!
-            return false // no positions, move towards the target to make room for people behind them
+            creep.memory._trav.offroad = Game.time; //don't spam this function if it fails!
+            return false; // no positions, move towards the target to make room for people behind them
         }
         let posit = creep.pos.findClosestByPath(positions); // find the closest position to the creep
         return this.travelTo(creep, posit, {range: 0, priority: priority}); // move to that position
     }
     
     static getCreepMoveEfficiency(creep) {
-        if (creep instanceof PowerCreep) return 9999 //no fatgiue!
-        let totalreduction= 0
-        let totalparts = 0
-        let used = creep.store.getUsedCapacity()
-        creep.body.forEach(b => {
+        if (creep instanceof PowerCreep) return 9999; //no fatgiue!
+        let totalreduction= 0;
+        let totalparts = 0;
+        let used = creep.store.getUsedCapacity();
+        creep.body.forEach((b) => {
             switch(b.type) {
                 case MOVE:
-                    totalreduction += b.hits > 0 ? b.boost ? (BOOSTS[b.type][b.boost].fatigue * -2) : -2 : 0
-                    return
+                    totalreduction += b.hits > 0 ? b.boost ? (BOOSTS[b.type][b.boost].fatigue * -2) : -2 : 0;
+                    return;
                     break;
                 case CARRY:
                     if (used > 0 && b.hits > 0) {
-                        used -= b.boost ? (BOOSTS[b.type][b.boost].capacity * CARRY_CAPACITY) : CARRY_CAPACITY
-                        totalparts += 1
+                        used -= b.boost ? (BOOSTS[b.type][b.boost].capacity * CARRY_CAPACITY) : CARRY_CAPACITY;
+                        totalparts += 1;
                     }
                     break;
                 default:
-                    totalparts += 1
+                    totalparts += 1;
                     break;
             }
         })
-        return totalparts > 0 ? totalreduction/totalparts : totalreduction
+        return totalparts > 0 ? totalreduction/totalparts : totalreduction;
     }
     static getPosFromDirection(source, dir) {
-        let xoffset = 0
-        let yoffset = 0
+        let xoffset = 0;
+        let yoffset = 0;
         switch (dir){
             case TOP:
                 yoffset = 1;
@@ -433,7 +426,7 @@ class Traveler {
             fill: "transparent",
             stroke: color,
             strokeWidth: .15,
-            opacity: opacity
+            opacity: opacity,
         });
     }
     /**
@@ -527,13 +520,13 @@ class Traveler {
         };
         let ret = PathFinder.search(origin, {
             pos: destination,
-            range: options.range
+            range: options.range,
         }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
             plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : 2,
             swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : 10,
-            roomCallback: callback
+            roomCallback: callback,
         });
         if (ret.incomplete && options.ensurePath) {
             if (options.useFindRoute === undefined) {
@@ -684,8 +677,7 @@ class Traveler {
             }
         }
         for (let site of room.find(FIND_MY_CONSTRUCTION_SITES)) {
-            if (site.structureType === STRUCTURE_CONTAINER || site.structureType === STRUCTURE_ROAD
-                || site.structureType === STRUCTURE_RAMPART) {
+            if (site.structureType === STRUCTURE_CONTAINER || site.structureType === STRUCTURE_ROAD || site.structureType === STRUCTURE_RAMPART) {
                 continue;
             }
             matrix.set(site.pos.x, site.pos.y, 0xff);
@@ -785,7 +777,7 @@ class Traveler {
     static deserializeState(travelData, destination) {
         let state = {};
         if (travelData.state) {
-            state.lastCoord = { x: travelData.state[STATE_PREV_X], y: travelData.state[STATE_PREV_Y] };
+            state.lastCoord = {x: travelData.state[STATE_PREV_X], y: travelData.state[STATE_PREV_Y]};
             state.cpu = travelData.state[STATE_CPU];
             state.stuckCount = travelData.state[STATE_STUCK];
             state.destination = new RoomPosition(travelData.state[STATE_DEST_X], travelData.state[STATE_DEST_Y], travelData.state[STATE_DEST_ROOMNAME]);
@@ -804,8 +796,7 @@ class Traveler {
             if (this.sameCoord(creep.pos, state.lastCoord)) {
                 // didn't move
                 stuck = true;
-            }
-            else if (this.isExit(creep.pos) && this.isExit(state.lastCoord)) {
+            } else if (this.isExit(creep.pos) && this.isExit(state.lastCoord)) {
                 // moved against exit
                 stuck = true;
             }
@@ -833,7 +824,7 @@ Creep.prototype.travelTo = (function(destination, options) {
     return Traveler.travelTo(this, destination, options);
 });
 
-PowerCreep.prototype.travelTo = Creep.prototype.travelTo
+PowerCreep.prototype.travelTo = Creep.prototype.travelTo;
 // call this in every room to update it's status
 Room.prototype.UpdateRoomStatus = (function() {
     Traveler.updateRoomStatus(this);
@@ -847,65 +838,51 @@ RoomPosition.prototype.FindPathTo = (function(destination, options) {
 Room.prototype.GetDistanceToRoom = (function(destination) {
     return Traveler.routeDistance(this.name, destination);
 });
-
-
 // Moves to a target
 // Add you own code here to interface with traveler
 Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     if (!target) {
         return false;
     }
-    
     if (this.body && this.getActiveBodyparts(MOVE) === 0) {
         return false;
     }
     if (range === undefined) {
-        range = 1
+        range = 1;
     }
     if (priority === undefined) {
-        priority = 1
+        priority = 1;
     }
-    
-    opts.range = range
-    opts.priority = priority
-    
-    Traveler.registerTarget(this, target, opts.range, opts.priority)
+    opts.range = range;
+    opts.priority = priority;
+    Traveler.registerTarget(this, target, opts.range, opts.priority);
     if (this.pos.getRangeTo(target) <= range) {
-        return true
+        return true;
     }
-    
     if (target.pos && target.pos.roomName !== this.room.name) {
-        opts.preferHighway = true
-        opts.ensurePath = true
-        opts.useFindRoute = true
+        opts.preferHighway = true;
+        opts.ensurePath = true;
+        opts.useFindRoute = true;
         return Traveler.travelTo(this, target, opts);
     }
-    
     return Traveler.travelTo(this, target, opts);
 }); 
-
 PowerCreep.prototype.Move = Creep.prototype.Move
-
-// Move a creep off road... Good for building and repairing.... Shitty for CPU
-// I'll take suggestions on CPU performance if anyone has them, until then, it is depreciated
+// Move a creep off road... Good for building, repairing, idling.
 Creep.prototype.MoveOffRoad = (function(target, dist, priority) {
     if (!target) {
-        return false
+        return false;
     }
-    
     if (priority === undefined) {
-        priority = 1
+        priority = 1;
     }
-    
     if (dist === undefined) {
-        dist = 3
+        dist = 3;
     }
-    
     if (target.pos) {
-        target = target.pos
+        target = target.pos;
     }
-    Traveler.registerTarget(this, target, dist, priority)
-    return Traveler.moveOffRoad(this, target, dist, priority)
+    Traveler.registerTarget(this, target, dist, priority);
+    return Traveler.moveOffRoad(this, target, dist, priority);
 });
-
-PowerCreep.prototype.MoveOffRoad = Creep.prototype.MoveOffRoad
+PowerCreep.prototype.MoveOffRoad = Creep.prototype.MoveOffRoad;
