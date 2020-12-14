@@ -236,7 +236,7 @@ class Traveler {
                 curDirection = direction -3;
                 if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 5; i++){
-                    if (i === 2) curDirection; //don't move to the target
+                    if (i === 2) continue; //don't move to the target
                     if (curDirection > 8) curDirection -= 8;
                     offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                     curDirection += 1;
@@ -249,7 +249,7 @@ class Traveler {
                 curDirection = direction -2;
                 if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 3; i++){
-                    if (i === 1) curDirection; //don't move to the target
+                    if (i === 1) continue; //don't move to the target
                     if (curDirection > 8) curDirection -= 8;
                     offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                     curDirection += 1;
