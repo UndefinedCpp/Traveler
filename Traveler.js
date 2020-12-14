@@ -30,12 +30,11 @@ class Traveler {
         if (creep.memory._trav.lastMove === Game.time) {
             return false;
         }
+        creep.memory._trav.lastMove = Game.time
         //initialize our options
-        const priority = options.priority ? options.priority : 1;
         const range = options.range ? options.range : 1;
+        const priority = options.priority ? options.priority : 1;
         destination = this.normalizePos(destination);
-        creep.memory._trav.lastMove = Game.time;
-        creep.memory._trav.target = {x: destination.x, y: destination.y, roomName: destination.roomName, range: range, priority: options.priority};
         
         //get body movement Efficiency and adjust options automatically
         const muscle = this.getCreepMoveEfficiency(creep)
@@ -142,7 +141,7 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
-        if (this.isExit(creep.pos) || (state.stuckCount === 0 && !options.push)) {
+        if (this.isExit(creep.pos) || (state.stuckCount <= 1 && !options.push)) {
             return creep.move(nextDirection);
         }
         const movePosition = this.getPosFromDirection(creep.pos, nextDirection);
@@ -150,23 +149,44 @@ class Traveler {
         const blocker = creep.pos.findInRange(FIND_MY_CREEPS, 1, {filter: c => creep.pos.getDirectionTo(c) === nextDirection})[0];
         if (blocker) {
             //ignore if fatigued and creeps that have already moved.
-            if (!blocker.memory._trav) {
+            if (!blocker.memory._trav || !blocker.memory._trav.target) {
                 //hasn't run yet... Lets swap in case the creep is idle
-                blocker.travelTo(creep.pos, {range: 0}); //swap
+                this.travelTo(blocker, creep.pos, {range: 0}); //swap
             } else if (!blocker.fatigue && (blocker.memory._trav.lastMove < Game.time)) {
                 const blockerPriority = blocker.memory._trav.target.priority;
                 const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
                 const blockerRange = blocker.memory._trav.target.range;
-                if (blocker.pos.getRangeTo(blockerTarget) > 1) {
-                    blocker.travelTo(blockerTarget, {push: true}); //push to target
-                } else if (priority > blockerPriority) {
-                    blocker.travelTo(creep.pos, {range: 0}); //swap
+                const currentRange = blocker.pos.getRangeTo(blockerTarget)
+                //Can we move closer?
+                if (currentRange > 1) {
+                    this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: 1}); //push to target
                 } else {
-                    travelData.state[2] = 999 //artificially set it to stuck and repath
+                    //if a higher priority, swap
+                    if (priority > blockerPriority) {
+                        blocker.Move(creep.pos, 0, 10); //swap
+                    } else {
+                        if (blockerRange !== 0) {
+                            //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
+                            let count = Game.cpu.getUsed()
+                            const newPosition = this.findNewFreePosition(blocker, blockerTarget)
+                            if (newPosition) {
+                                blocker.Move(newPosition, 0, 10) //move to the free position
+                            } else {
+                                travelData.state[2] = 999 //artificially set it to stuck and repath
+                                return ERR_NO_PATH
+                            }
+                        } else {
+                            travelData.state[2] = 999 //artificially set it to stuck and repath
+                            return ERR_NO_PATH
+                        }
+                    }
                 }
             } else {
                 travelData.state[2] = 999 //artificially set it to stuck and repath
+                return ERR_NO_PATH
             }
+            delete creep.memory._trav.path
+            
         }
         return creep.move(nextDirection);
     }
@@ -181,6 +201,133 @@ class Traveler {
         }
         return destination;
     }
+    static registerTarget(creep, target, range, priority) {
+        if (!target) return
+        if (!creep) return
+        if (target.pos) target = target.pos
+        if (!range) range = 1
+        if (!priority) priority = 1
+        if (!creep.memory._trav) creep.memory._trav = {}
+        creep.memory._trav.target = {x: target.x, y: target.y, roomName: target.roomName, range: range, priority: priority};
+    }
+    
+    static GetXFromDirection(dir, sp) {
+    
+        return dir === LEFT || dir === TOP_LEFT || dir === BOTTOM_LEFT ?
+        sp - 1 : dir === RIGHT || dir === TOP_RIGHT || dir === BOTTOM_RIGHT ?
+        sp + 1 : sp
+    }
+
+    static GetYFromDirection(dir, sp) {
+        return dir === TOP || dir === TOP_LEFT || dir === TOP_RIGHT ? 
+        sp - 1 : dir === BOTTOM || dir === BOTTOM_LEFT || dir === BOTTOM_RIGHT ? 
+        sp + 1 : sp
+    }
+    
+    static findNewFreePosition(creep, target) {
+        let direction = creep.pos.getDirectionTo(target)//get direction to target
+        let positions = []; //hold positions we can move to
+        let offsets = {}
+        let curDirection
+        switch(direction) {
+            case TOP:
+            case LEFT:
+            case RIGHT:
+            case BOTTOM:
+                curDirection = direction -3
+                if (curDirection < 1) curDirection += 8
+                for (let i = 0; i < 5; i++){
+                    if (i === 2) curDirection; //don't move to the target
+                    if (curDirection > 8) curDirection -= 8
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)}
+                    curDirection += 1
+                }
+                break;
+            case TOP_RIGHT:
+            case BOTTOM_RIGHT:
+            case BOTTOM_LEFT:
+            case TOP_LEFT:
+                curDirection = direction -2
+                if (curDirection < 1) curDirection += 8
+                for (let i = 0; i < 3; i++){
+                    if (i === 1) curDirection; //don't move to the target
+                    if (curDirection > 8) curDirection -= 8
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)}
+                    curDirection += 1
+                }
+                break;
+        }
+        
+        const t = new Room.Terrain(creep.room.name);
+        const structureMatrix = this.getStructureMatrix(creep.room, false)
+        const creepMatrix = this.getCreepMatrix(creep.room, false)
+        for (let o in offsets) {
+            //Out of bounds/exit
+            if (offsets[o].x <= 0 || offsets[o].x >= 49 || offsets[o].y <= 0 || offsets[o].y >= 49) {
+                continue;
+            }
+            //don't try to move on a wall.
+            if (t.get(offsets[o].x,offsets[o].y) === TERRAIN_MASK_WALL) {
+                continue
+            }
+            
+            if (structureMatrix.get(offsets[o].x, offsets[o].y) <= 10 // No impassable structures
+            && creepMatrix.get(offsets[o].x, offsets[o].y) < 255) { //no creep there
+                return new RoomPosition(offsets[o].x, offsets[o].y, creep.room.name)
+            }
+        }
+        
+        return 
+    }
+    
+    static moveOffRoad(creep, targetpos, distance, priority) {
+        if (!creep.memory._trav) {
+            creep.memory._trav = {}
+        }
+        if (!creep.memory._trav.offroad) {
+            creep.memory._trav.offroad = 0
+        }
+        if (creep.memory._trav.lastMove === Game.time) {
+            return false
+        }
+        
+        if (creep.memory._trav.offroad > Game.time - 20) {
+            return false
+        }
+        
+        // see if we are offroad
+        if (!_.some(creep.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) {
+            return true;
+        }
+        const t = new Room.Terrain(creep.room.name);
+        const structureMatrix = this.getStructureMatrix(creep.room, false);
+        const creepMatrix = this.getCreepMatrix(creep.room, false);
+        let positions = [];
+        let offsets = []
+        for (let x = -distance; x <= distance; x++) {
+            offsets.push(x); // ah, push it
+        }
+        // find each valid position around the target that does not have a road
+        _.forEach(offsets, (x) => _.forEach(offsets, (y) => {
+            let xpos = targetpos.x + x 
+            let ypos = targetpos.y + y
+            //not out of bounds/exit
+            if (!(xpos <= 0 || xpos >= 49 || ypos <= 0 || ypos >= 49)) {
+                if (t.get(x,y) !== TERRAIN_MASK_WALL//don't try to move on a wall.
+                && structureMatrix.get(xpos, ypos) <= 10 // No impassable structures
+                && creepMatrix.get(xpos, ypos) < 255) { //no creep there
+                    positions.push(new RoomPosition(xpos, ypos, creep.room.name)); //ah, push it
+                }
+            }
+        }));
+        if (_.size(positions) === 0) {
+            creep.memory._trav.offroad = Game.time //don't spam this function if it fails!
+            return false // no positions, move towards the target to make room for people behind them
+        }
+        let posit = creep.pos.findClosestByPath(positions); // find the closest position to the creep
+        return this.travelTo(creep, posit, {range: 0, priority: priority}); // move to that position
+    }
+    
     static getCreepMoveEfficiency(creep) {
         if (creep instanceof PowerCreep) return 9999 //no fatgiue!
         let totalreduction= 0
@@ -685,10 +832,7 @@ const STATE_DEST_ROOMNAME = 6;
 Creep.prototype.travelTo = (function(destination, options) {
     return Traveler.travelTo(this, destination, options);
 });
-// adds the range into the movement for easier calls.
-Creep.prototype.MoveToRange = (function(destination, r, options) {
-    return this.Move(destination, {range: r}, options);
-});
+
 PowerCreep.prototype.travelTo = Creep.prototype.travelTo
 // call this in every room to update it's status
 Room.prototype.UpdateRoomStatus = (function() {
@@ -703,59 +847,65 @@ RoomPosition.prototype.FindPathTo = (function(destination, options) {
 Room.prototype.GetDistanceToRoom = (function(destination) {
     return Traveler.routeDistance(this.name, destination);
 });
+
+
 // Moves to a target
 // Add you own code here to interface with traveler
-Creep.prototype.Move = (function(target, opts) {
-    if (this.getActiveBodyparts(MOVE) === 0) {
-        return false;
-    }
+Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     if (!target) {
         return false;
     }
-    let result;
-    if (opts) {
-        result = this.travelTo(target,opts);
-    } else {
-        if (target.pos && target.pos.roomName !== this.room.name) {
-            result = this.travelTo(target, {preferHighway: true, ensurePath: true, useFindRoute: true});
-        } else {
-            result = this.travelTo(target);
-        }
+    
+    if (this.body && this.getActiveBodyparts(MOVE) === 0) {
+        return false;
     }
-    return result === OK;
+    if (range === undefined) {
+        range = 1
+    }
+    if (priority === undefined) {
+        priority = 1
+    }
+    
+    opts.range = range
+    opts.priority = priority
+    
+    Traveler.registerTarget(this, target, opts.range, opts.priority)
+    if (this.pos.getRangeTo(target) <= range) {
+        return true
+    }
+    
+    if (target.pos && target.pos.roomName !== this.room.name) {
+        opts.preferHighway = true
+        opts.ensurePath = true
+        opts.useFindRoute = true
+        return Traveler.travelTo(this, target, opts);
+    }
+    
+    return Traveler.travelTo(this, target, opts);
 }); 
+
+PowerCreep.prototype.Move = Creep.prototype.Move
+
 // Move a creep off road... Good for building and repairing.... Shitty for CPU
-// I'll take suggestions on CPU performance if anyone has them
-Creep.prototype.MoveOffRoad = (function(target, dist) {
-    // see if we are offroad
-    if (!_.some(this.pos.lookFor(LOOK_STRUCTURES), (s) => s instanceof StructureRoad)) {
-        return true;
+// I'll take suggestions on CPU performance if anyone has them, until then, it is depreciated
+Creep.prototype.MoveOffRoad = (function(target, dist, priority) {
+    if (!target) {
+        return false
     }
-    // if not find an offroad post towards the target
-    const positions = [];
-    // load offset positions that it could move to within the set range
-    let offsets = [];
-    for (let x = -dist; x <= dist; x++) {
-        offsets.push(x); // ah, push it
+    
+    if (priority === undefined) {
+        priority = 1
     }
-    const t = new Room.Terrain(this.room.name); // load up the rooms terrain
-    // find each valid position around the target that does not have a road
-    _.forEach(offsets, (x) => _.forEach(offsets, (y) => {
-        // make sure the position is within the room and not an exit tile
-        if (this.pos.x + x < 49 && this.pos.y + y < 49 && this.pos.x + x > 0 && this.pos.y + y > 0) {
-            const p = new RoomPosition(this.pos.x + x, this.pos.y + y, this.pos.roomName); // New room position to check
-            if (!_.some(p.lookFor(LOOK_STRUCTURES)) // move off of all structures
-            && !_.some(p.lookFor(LOOK_CONSTRUCTION_SITES)) // no construction sites
-            && t.get(p.x,p.y) !== TERRAIN_MASK_WALL) { // no wall terrain
-                positions.push(p); //Push the valid location
-            }
-        }
-    }));
-    // make sure the position is towards the target and there is no creeps
-    const validPositions = _.filter(positions, (rp) => rp.getRangeTo(target) <= this.pos.getRangeTo(target) && rp.lookFor(LOOK_CREEPS).length === 0);
-    if (validPositions.length === 0) {
-        return this.Move(target); // no positions, move towards the target to make room for people behind them
+    
+    if (dist === undefined) {
+        dist = 3
     }
-    let posit = this.pos.findClosestByPath(validPositions); // find the closest position to the creep
-    return this.Move(posit); // move to that position
+    
+    if (target.pos) {
+        target = target.pos
+    }
+    Traveler.registerTarget(this, target, dist, priority)
+    return Traveler.moveOffRoad(this, target, dist, priority)
 });
+
+PowerCreep.prototype.MoveOffRoad = Creep.prototype.MoveOffRoad

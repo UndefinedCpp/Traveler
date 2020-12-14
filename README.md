@@ -9,7 +9,7 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 * Effective [long-range pathing](https://github.com/bonzaiferroni/bonzAI/wiki/Improving-on-moveTo's-efficiency#very-long-distances-path-length-1200) 
 * [Lots of options](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API)
 * [Visuals](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler:-Features#show-your-path)
-* [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Pass {priority: xx} in options.
+* [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Use creep.Move()
 
 ## Installation
 
@@ -21,23 +21,29 @@ Traveler is a general-purpose tool for moving your creeps around. Feel free to f
 3. Replace situations where you used `moveTo` with `travelTo`
 ```
     // creep.moveTo(myDestination);
-    creep.travelTo(myDestination);
+    creep.Move(myDestination, range, priority, opts = {}); (see wiki for more)
 ```
 
 ![Installation animation](http://i.imgur.com/hUu0ozU.gif)
 
 #### Performance considerations
-1. `travelTo` creates a new object in creep memory, `_trav`, which is analogous to the object used by `moveTo()` for caching the creeps path. For this reason, it will save memory to use either `travelTo()` or `moveTo()` with a given creep, but not both.
-2. As with any algorithm where creeps aren't a consideration for pathing by default, you'll have best results when their path has a low chance of including immobile creeps. My creeps rarely reach the "stuck threshold" because I take extra considerations to keep the roads clear.
+1. `Move` creates a new object in creep memory, `_trav`, which is analogous to the object used by `moveTo()` for caching the creeps path. For this reason, it will save memory to use either `travelTo()` or `moveTo()` with a given creep, but not both.
+2. moveOffRoad() should be used only when needed. This function has a cooldown of 20 ticks to avoid spamming CPU.
 
 ## WishList
-* Optimization for recursive push. Currently creeps will only push towards a target and not another open space near the target. Working on balancing this aspect with CPU usage
 
 ## Documentation
 
-The file itself has comments, and you can also find documentation [in the wiki](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
+The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+
+2020-12-14
+* OPTIMIZATION: Major optimizations in moveOffRoad. CPU usage reduced to an average of 0.25 from 0.7.
+* NEW: creep.Move() is the new standard and creep.travelTo is depreciated. Please see the wiki for usage.
+* FIX: Creeps will now push to other adjacent spots to that target and the creep when being pushed.
+* OTHER: minor bug fixes and quality of life improvements on the backend.
+* REMOVED: creep.MoveToRange() has been removed and merged into creep.Move()
 
 2020-12-13
 * Recursive push added. Creeps will send a 'push' option to one another to force a move.
