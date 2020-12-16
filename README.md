@@ -38,6 +38,9 @@ The file itself has comments, and you can also find documentation [in the wiki](
 
 ## Changelog
 
+2020-12-16
+* OPTIMIZATION/BUG FIX: Several changes to the push/swap logic. Now more effecient and a few edge cases eliminated thanks to MistySenpai's testing and reporting.
+
 2020-12-14
 * OPTIMIZATION: Major optimizations in moveOffRoad. CPU usage reduced to an average of 0.25 from 0.7.
 * NEW: creep.Move() is the new standard and creep.travelTo is depreciated. Please see the wiki for usage.

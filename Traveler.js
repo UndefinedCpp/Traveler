@@ -1,16 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", {value: true});
 class Traveler {
-    /**
-     * move creep to destination
-     * @param creep
-     * @param destination
-     * @param options
-     * @returns {number}
-     */
     static travelTo(creep, destination, options = {}) {
         // uncomment if you would like to register hostile rooms entered
-        // this.updateRoomStatus(creep.room);
+        // this is highly recommended
+        this.updateRoomStatus(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -137,10 +131,9 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
-        if (this.isExit(creep.pos) || (state.stuckCount <= 1 && !options.push)) {
+        if (this.isExit(creep.pos) || (state.stuckCount > 0 && !options.push)) {
             return creep.move(nextDirection);
         }
-        const movePosition = this.getPosFromDirection(creep.pos, nextDirection);
         //Find if a creep is blocking our movement
         const blocker = creep.pos.findInRange(FIND_MY_CREEPS, 1, {filter: c => creep.pos.getDirectionTo(c) === nextDirection})[0];
         if (blocker) {
@@ -148,6 +141,7 @@ class Traveler {
             if (!blocker.memory._trav || !blocker.memory._trav.target) {
                 //hasn't run yet... Lets swap in case the creep is idle
                 this.travelTo(blocker, creep.pos, {range: 0}); //swap
+                blocker._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
             } else if (!blocker.fatigue && (blocker.memory._trav.lastMove < Game.time)) {
                 const blockerPriority = blocker.memory._trav.target.priority;
                 const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
@@ -155,47 +149,53 @@ class Traveler {
                 const currentRange = blocker.pos.getRangeTo(blockerTarget);
                 //Can we move closer?
                 if (currentRange > 1) {
-                    this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: 1}); //push to target
+                    this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: true}); //push to target
                 } else {
                     //if a higher priority, swap
                     if (priority > blockerPriority) {
-                        blocker.Move(creep.pos, 0, 10); //swap
+                        //move to a new free position if able
+                        if (!this.moveToNewFreePosition(blocker, blockerTarget)) {
+                            blocker.Move(creep.pos, 0, 10); //failed. swap
+                            blocker.memory._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
+                        }
                     } else {
                         if (blockerRange !== 0) {
                             //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
-                            let count = Game.cpu.getUsed();
-                            const newPosition = this.findNewFreePosition(blocker, blockerTarget);
-                            if (newPosition) {
-                                blocker.Move(newPosition, 0, 10); //move to the free position
-                            } else {
-                                travelData.state[2] = 999; //artificially set it to stuck and repath
+                            if (!this.moveToNewFreePosition(blocker, blockerTarget)){
+                                travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
                                 return ERR_NO_PATH;
                             }
                         } else {
-                            travelData.state[2] = 999; //artificially set it to stuck and repath
+                            travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
                             return ERR_NO_PATH;
                         }
                     }
                 }
             } else {
-                travelData.state[2] = 999; //artificially set it to stuck and repath
+                travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
                 return ERR_NO_PATH;
             }
             delete creep.memory._trav.path;
         }
         return creep.move(nextDirection);
     }
-    /**
-     * make position objects consistent so that either can be used as an argument
-     * @param destination
-     * @returns {any}
-     */
+    //Finds a new free position near the target and moves there
+    static moveToNewFreePosition(blocker, blockerTarget) {
+        const newPosition = this.findNewFreePosition(blocker, blockerTarget);
+        if (newPosition) {
+            this.travelTo(blocker, newPosition, {range: 0, push: true})
+            return true
+        }
+        return false
+    }
+    //normalized to desitnations passed to a position instead of a object with a pos in it
     static normalizePos(destination) {
         if (!(destination instanceof RoomPosition)) {
             return destination.pos;
         }
         return destination;
     }
+    //registers the target with traveler for push logic
     static registerTarget(creep, target, range, priority) {
         if (!target) return;
         if (!creep) return;
@@ -205,6 +205,7 @@ class Traveler {
         if (!creep.memory._trav) creep.memory._trav = {};
         creep.memory._trav.target = {x: target.x, y: target.y, roomName: target.roomName, range: range, priority: priority};
     }
+    //get an x grid in a direction from a start point
     static GetXFromDirection(dir, sp) {
         return dir === LEFT || dir === TOP_LEFT || dir === BOTTOM_LEFT ?
             sp - 1
@@ -214,6 +215,7 @@ class Traveler {
                 :
                 sp;
     }
+    //get an y grid in a direction from a start point
     static GetYFromDirection(dir, sp) {
         return dir === TOP || dir === TOP_LEFT || dir === TOP_RIGHT ?
             sp - 1
@@ -223,6 +225,7 @@ class Traveler {
                 :
                 sp;
     }
+    //finds and returns a new free position nearby to move to relative to it's target
     static findNewFreePosition(creep, target) {
         let direction = creep.pos.getDirectionTo(target);//get direction to target
         let positions = []; //hold positions we can move to
@@ -236,10 +239,10 @@ class Traveler {
                 curDirection = direction -3;
                 if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 5; i++){
-                    if (i === 2) continue; //don't move to the target
-                    if (curDirection > 8) curDirection -= 8;
-                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                     curDirection += 1;
+                    if (curDirection > 8) curDirection -= 8;
+                    if (i === 2) continue; //don't move to the target
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                 }
                 break;
             case TOP_RIGHT:
@@ -249,10 +252,10 @@ class Traveler {
                 curDirection = direction -2;
                 if (curDirection < 1) curDirection += 8;
                 for (let i = 0; i < 3; i++){
-                    if (i === 1) continue; //don't move to the target
-                    if (curDirection > 8) curDirection -= 8;
-                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                     curDirection += 1;
+                    if (curDirection > 8) curDirection -= 8;
+                    if (i === 1) continue; //don't move to the target
+                    offsets[_.size(offsets)] = {x: this.GetXFromDirection(curDirection, creep.pos.x), y: this.GetYFromDirection(curDirection, creep.pos.y)};
                 }
                 break;
         }
@@ -268,13 +271,14 @@ class Traveler {
             if (t.get(offsets[o].x,offsets[o].y) === TERRAIN_MASK_WALL) {
                 continue;
             }
-            if (structureMatrix.get(offsets[o].x, offsets[o].y) <= 10 // No impassable structures
+            if (structureMatrix.get(offsets[o].x, offsets[o].y) < 255 // No impassable structures
             && creepMatrix.get(offsets[o].x, offsets[o].y) < 255) { //no creep there
                 return new RoomPosition(offsets[o].x, offsets[o].y, creep.room.name);
             }
         }
         return;
     }
+    //moves to a nearby off of a road position
     static moveOffRoad(creep, targetpos, distance, priority) {
         if (!creep.memory._trav) {
             creep.memory._trav = {};
@@ -307,7 +311,7 @@ class Traveler {
             //not out of bounds/exit
             if (!(xpos <= 0 || xpos >= 49 || ypos <= 0 || ypos >= 49)) {
                 if (t.get(x,y) !== TERRAIN_MASK_WALL//don't try to move on a wall.
-                && structureMatrix.get(xpos, ypos) <= 10 // No impassable structures
+                && structureMatrix.get(xpos, ypos) < 255 // No impassable structures
                 && creepMatrix.get(xpos, ypos) < 255) { //no creep there
                     positions.push(new RoomPosition(xpos, ypos, creep.room.name)); //ah, push it
                 }
@@ -320,7 +324,7 @@ class Traveler {
         let posit = creep.pos.findClosestByPath(positions); // find the closest position to the creep
         return this.travelTo(creep, posit, {range: 0, priority: priority}); // move to that position
     }
-    
+    //gets the move efficiency of a creep based on it's number of move parts and boost realative to it's size
     static getCreepMoveEfficiency(creep) {
         if (creep instanceof PowerCreep) return 9999; //no fatgiue!
         let totalreduction= 0;
@@ -345,6 +349,7 @@ class Traveler {
         })
         return totalparts > 0 ? totalreduction/totalparts : totalreduction;
     }
+    //gets a pos to a direction from a starting point
     static getPosFromDirection(source, dir) {
         let xoffset = 0;
         let yoffset = 0;
@@ -380,46 +385,23 @@ class Traveler {
         }
         return new RoomPosition(source.x+xoffset, source.y+yoffset, source.roomName);
     }
-    /**
-     * check if room should be avoided by findRoute algorithm
-     * @param roomName
-     * @returns {RoomMemory|number}
-     */
+    //check if room should be avoided by findRoute algorithm
     static checkAvoid(roomName) {
         return Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].avoid;
     }
-    /**
-     * check if a position is an exit
-     * @param pos
-     * @returns {boolean}
-     */
+    //check if a position is an exit
     static isExit(pos) {
         return pos.x === 0 || pos.y === 0 || pos.x === 49 || pos.y === 49;
     }
-    /**
-     * check two coordinates match
-     * @param pos1
-     * @param pos2
-     * @returns {boolean}
-     */
+    //check two coordinates match
     static sameCoord(pos1, pos2) {
         return pos1.x === pos2.x && pos1.y === pos2.y;
     }
-    /**
-     * check if two positions match
-     * @param pos1
-     * @param pos2
-     * @returns {boolean}
-     */
+    //check if two positions match
     static samePos(pos1, pos2) {
         return this.sameCoord(pos1, pos2) && pos1.roomName === pos2.roomName;
     }
-    /**
-     * draw a circle at position
-     * @param pos
-     * @param color
-     * @param opacity
-     */
+    //draw a circle at position
     static circle(pos, color, opacity) {
         new RoomVisual(pos.roomName).circle(pos, {
             radius: .45,
@@ -429,10 +411,8 @@ class Traveler {
             opacity: opacity,
         });
     }
-    /**
-     * update memory on whether a room should be avoided based on controller owner
-     * @param room
-     */
+    //update memory on whether a room should be avoided based on controller owner
+    //TODO: Add whitelist functionality
     static updateRoomStatus(room) {
         if (!room) {
             return;
@@ -445,13 +425,7 @@ class Traveler {
             }
         }
     }
-    /**
-     * find a path from origin to destination
-     * @param origin
-     * @param destination
-     * @param options
-     * @returns {PathfinderReturn}
-     */
+    //find a path from origin to destination
     static findTravelPath(origin, destination, options = {}) {
         _.defaults(options, {
             ignoreCreeps: true,
@@ -546,13 +520,7 @@ class Traveler {
         }
         return ret;
     }
-    /**
-     * find a viable sequence of rooms that can be used to narrow down pathfinder's search algorithm
-     * @param origin
-     * @param destination
-     * @param options
-     * @returns {{}}
-     */
+    //find a viable sequence of rooms that can be used to narrow down pathfinder's search algorithm
     static findRoute(origin, destination, options = {}) {
         let restrictDistance = options.restrictDistance || Game.map.getRoomLinearDistance(origin, destination) + 10;
         let allowedRooms = {[origin]: true, [destination]: true};
@@ -612,12 +580,7 @@ class Traveler {
         }
         return allowedRooms;
     }
-    /**
-     * check how many rooms were included in a route returned by findRoute
-     * @param origin
-     * @param destination
-     * @returns {number}
-     */
+    //check how many rooms were included in a route returned by findRoute
     static routeDistance(origin, destination) {
         let linearDistance = Game.map.getRoomLinearDistance(origin, destination);
         if (linearDistance >= 32) {
@@ -628,12 +591,7 @@ class Traveler {
             return Object.keys(allowedRooms).length;
         }
     }
-    /**
-     * build a cost matrix based on structures in the room. Will be cached for more than one tick. Requires vision.
-     * @param room
-     * @param freshMatrix
-     * @returns {any}
-     */
+    //build a cost matrix based on structures in the room. Will be cached for more than one tick. Requires vision.
     static getStructureMatrix(room, freshMatrix) {
         if (!this.structureMatrixCache[room.name] || (freshMatrix && Game.time !== this.structureMatrixTick)) {
             this.structureMatrixTick = Game.time;
@@ -642,11 +600,7 @@ class Traveler {
         }
         return this.structureMatrixCache[room.name];
     }
-    /**
-     * build a cost matrix based on creeps and structures in the room. Will be cached for one tick. Requires vision.
-     * @param room
-     * @returns {any}
-     */
+    //build a cost matrix based on creeps and structures in the room. Will be cached for one tick. Requires vision.
     static getCreepMatrix(room) {
         if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick) {
             this.creepMatrixTick = Game.time;
@@ -654,13 +608,7 @@ class Traveler {
         }
         return this.creepMatrixCache[room.name];
     }
-    /**
-     * add structures to matrix so that impassible structures can be avoided and roads given a lower cost
-     * @param room
-     * @param matrix
-     * @param roadCost
-     * @returns {CostMatrix}
-     */
+    //add structures to matrix so that impassible structures can be avoided and roads given a lower cost
     static addStructuresToMatrix(room, matrix, roadCost) {
         let impassibleStructures = [];
         for (let structure of room.find(FIND_STRUCTURES)) {
@@ -671,7 +619,8 @@ class Traveler {
             } else if (structure instanceof StructureRoad) {
                 matrix.set(structure.pos.x, structure.pos.y, roadCost);
             } else if (structure instanceof StructureContainer) {
-                matrix.set(structure.pos.x, structure.pos.y, 5);
+                continue;
+                //matrix.set(structure.pos.x, structure.pos.y, 5); //creeps can walk over containers. So this doesn't matter. Saving it just in case it breaks something
             } else {
                 impassibleStructures.push(structure);
             }
@@ -685,37 +634,14 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
-        /*
-        for (let x = 0; x < 50; x+=49) {
-            for (let y = 0; y < 50; y++) {
-                matrix.set(x, y, 100);
-            }
-        }
-        for (let y = 0; y < 50; y+=49) {
-            for (let x = 0; x < 50; x++) {
-                matrix.set(x, y, 100);
-            }
-        }
-        */
         return matrix;
     }
-    /**
-     * add creeps to matrix so that they will be avoided by other creeps
-     * @param room
-     * @param matrix
-     * @returns {CostMatrix}
-     */
+    //add creeps to matrix so that they will be avoided by other creeps
     static addCreepsToMatrix(room, matrix) {
         room.find(FIND_CREEPS).forEach((creep) => matrix.set(creep.pos.x, creep.pos.y, 0xff));
         return matrix;
     }
-    /**
-     * serialize a path, traveler style. Returns a string of directions.
-     * @param startPos
-     * @param path
-     * @param color
-     * @returns {string}
-     */
+    //serialize a path, traveler style. Returns a string of directions.
     static serializePath(startPos, path, color = "orange") {
         let serializedPath = "";
         let lastPosition = startPos;
@@ -729,12 +655,7 @@ class Traveler {
         }
         return serializedPath;
     }
-    /**
-     * returns a position at a direction relative to origin
-     * @param origin
-     * @param direction
-     * @returns {RoomPosition}
-     */
+    //returns a position at a direction relative to origin
     static positionAtDirection(origin, direction) {
         let offsetX = [0, 0, 1, 1, 1, 0, -1, -1, -1];
         let offsetY = [0, -1, -1, 0, 1, 1, 1, 0, -1];
@@ -744,35 +665,6 @@ class Traveler {
             return;
         }
         return new RoomPosition(x, y, origin.roomName);
-    }
-    /**
-     * convert room avoidance memory from the old pattern to the one currently used
-     * @param cleanup
-     */
-    static patchMemory(cleanup = false) {
-        if (!Memory.empire) {
-            return;
-        }
-        if (!Memory.empire.hostileRooms) {
-            return;
-        }
-        let count = 0;
-        for (let roomName in Memory.empire.hostileRooms) {
-            if (Memory.empire.hostileRooms[roomName]) {
-                if (!Memory.rooms[roomName]) {
-                    Memory.rooms[roomName] = {};
-                }
-                Memory.rooms[roomName].avoid = 1;
-                count++;
-            }
-            if (cleanup) {
-                delete Memory.empire.hostileRooms[roomName];
-            }
-        }
-        if (cleanup) {
-            delete Memory.empire.hostileRooms;
-        }
-        console.log(`TRAVELER: room avoidance data patched for ${count} rooms`);
     }
     static deserializeState(travelData, destination) {
         let state = {};
