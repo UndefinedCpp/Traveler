@@ -17,7 +17,8 @@ class Traveler {
             delete creep.memory._travel;
             creep.memory._trav = {};
         }
-        if (creep.memory._trav.lastMove === Game.time) {
+        const repathing = options.repathing ? options.repathing : false
+        if (creep.memory._trav.lastMove === Game.time && !repathing) {
             return false;
         }
         creep.memory._trav.lastMove = Game.time;
@@ -131,7 +132,9 @@ class Traveler {
             options.returnData.state = state;
             options.returnData.path = travelData.path;
         }
-        if (this.isExit(creep.pos) || (state.stuckCount > 0 && !options.push)) {
+        
+        //if we are not trying to out of a creeps way, don't run push logic if we are not stuck or on an exit tile.
+        if (this.isExit(creep.pos) || (state.stuckCount === 0 && !options.push) || repathing) {
             return creep.move(nextDirection);
         }
         //Find if a creep is blocking our movement
@@ -141,43 +144,52 @@ class Traveler {
             if (!blocker.memory._trav || !blocker.memory._trav.target) {
                 //hasn't run yet... Lets swap in case the creep is idle
                 this.travelTo(blocker, creep.pos, {range: 0}); //swap
-                blocker._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
-            } else if (!blocker.fatigue && (blocker.memory._trav.lastMove < Game.time)) {
-                const blockerPriority = blocker.memory._trav.target.priority;
-                const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
-                const blockerRange = blocker.memory._trav.target.range;
-                const currentRange = blocker.pos.getRangeTo(blockerTarget);
-                //Can we move closer?
-                if (currentRange > 1) {
-                    this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: true}); //push to target
-                } else {
-                    //if a higher priority, swap
-                    if (priority > blockerPriority) {
-                        //move to a new free position if able
-                        if (!this.moveToNewFreePosition(blocker, blockerTarget)) {
-                            blocker.Move(creep.pos, 0, 10); //failed. swap
-                            blocker.memory._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
-                        }
-                    } else {
-                        if (blockerRange !== 0) {
-                            //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
-                            if (!this.moveToNewFreePosition(blocker, blockerTarget)){
-                                travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-                                return ERR_NO_PATH;
-                            }
-                        } else {
-                            travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-                            return ERR_NO_PATH;
-                        }
-                    }
+                if (blocker._trav){
+                    blocker._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
                 }
             } else {
-                travelData.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-                return ERR_NO_PATH;
+                if (blocker.memory._trav.lastMove < Game.time-2) { //blocker has not moved for 2 ticks.. Working or idle
+                    if (!blocker.fatigue) { //no fatigue, should be idle or poorly built.
+                        const blockerPriority = blocker.memory._trav.target.priority;
+                        const blockerTarget = new RoomPosition(blocker.memory._trav.target.x, blocker.memory._trav.target.y, blocker.memory._trav.target.roomName);
+                        const blockerRange = blocker.memory._trav.target.range;
+                        const currentRange = blocker.pos.getRangeTo(blockerTarget);
+                        //Can we move closer?
+                        if (currentRange > 1) {
+                            this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: true}); //push to target
+                        } else {
+                            //if a higher priority, swap
+                            if (priority > blockerPriority) {
+                                //move to a new free position if able
+                                if (!this.moveToNewFreePosition(blocker, blockerTarget)) {
+                                    blocker.Move(creep.pos, 0, 10); //failed. swap
+                                    delete blocker.memory._trav.path //force repath in case it moved out of range
+                                }
+                            } else {
+                                if (blockerRange !== 0) {
+                                    //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
+                                    if (!this.moveToNewFreePosition(blocker, blockerTarget)){
+                                        return this.repath(creep, destination, options)
+                                    }
+                                } else {
+                                    return this.repath(creep, destination, options)
+                                }
+                            }
+                        }
+                    } else { //blocker is fatigued, lets go around.
+                        return this.repath(creep, destination, options)
+                    }
+                }
             }
-            delete creep.memory._trav.path;
+            
         }
         return creep.move(nextDirection);
+    }
+    //calls a same tick repath
+    static repath(creep, destination, options) {
+        creep.memory._trav.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
+        return this.travelTo(creep, destination, options, {repathing: true})
+        
     }
     //Finds a new free position near the target and moves there
     static moveToNewFreePosition(blocker, blockerTarget) {
@@ -683,17 +695,16 @@ class Traveler {
         travelData.state = [creep.pos.x, creep.pos.y, state.stuckCount, state.cpu, destination.x, destination.y, destination.roomName];
     }
     static isStuck(creep, state) {
-        let stuck = false;
         if (state.lastCoord !== undefined) {
             if (this.sameCoord(creep.pos, state.lastCoord)) {
                 // didn't move
-                stuck = true;
+                return true
             } else if (this.isExit(creep.pos) && this.isExit(state.lastCoord)) {
                 // moved against exit
-                stuck = true;
+                return true
             }
         }
-        return stuck;
+        return false;
     }
 }
 Traveler.structureMatrixCache = {};
