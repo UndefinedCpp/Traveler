@@ -43,6 +43,9 @@ The file itself has comments, and you can also find documentation [in the wiki](
 
 ## Changelog
 
+2020-12-21
+* BUG FIX: Fixed two edge cases. One of which will set the range to 0 if the target is an exit tile to protect the user from themselves.
+
 2020-12-17
 * BUG FIX: Changed a bit of logic around that could cause creeps to repath instead of passing each other. Thanks Misty for testing it.
 

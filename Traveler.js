@@ -21,7 +21,7 @@ class Traveler {
         if (creep.memory._trav.lastMove === Game.time && !repathing) {
             return false;
         }
-        creep.memory._trav.lastMove = Game.time;
+        if (!options.push) creep.memory._trav.lastMove = Game.time;
         //initialize our options
         const range = options.range ? options.range : 1;
         const priority = options.priority ? options.priority : 1;
@@ -34,7 +34,7 @@ class Traveler {
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
-        if (options.range && rangeToDestination <= options.range) {
+        if (options.range && rangeToDestination <= options.range && !this.isExit(creep.pos)) {
             return OK;
         }
         else if (rangeToDestination <= 1) {
@@ -133,8 +133,8 @@ class Traveler {
             options.returnData.path = travelData.path;
         }
         
-        //if we are not trying to out of a creeps way, don't run push logic if we are not stuck or on an exit tile.
-        if (this.isExit(creep.pos) || (state.stuckCount === 0 && !options.push) || repathing) {
+        //Don't push
+        if (!(state.stuckCount > 0  || options.push)) {
             return creep.move(nextDirection);
         }
         //Find if a creep is blocking our movement
@@ -162,7 +162,7 @@ class Traveler {
                             if (priority > blockerPriority) {
                                 //move to a new free position if able
                                 if (!this.moveToNewFreePosition(blocker, blockerTarget)) {
-                                    blocker.Move(creep.pos, 0, 10); //failed. swap
+                                    this.travelTo(blocker, creep.pos, {push:true, range: 0})
                                     delete blocker.memory._trav.path //force repath in case it moved out of range
                                 }
                             } else {
@@ -181,14 +181,13 @@ class Traveler {
                     }
                 }
             }
-            
         }
         return creep.move(nextDirection);
     }
     //calls a same tick repath
     static repath(creep, destination, options) {
         creep.memory._trav.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-        return this.travelTo(creep, destination, options, {repathing: true})
+        return this.travelTo(creep, destination, options, {repath: true})
         
     }
     //Finds a new free position near the target and moves there
@@ -215,6 +214,7 @@ class Traveler {
         if (!range) range = 1;
         if (!priority) priority = 1;
         if (!creep.memory._trav) creep.memory._trav = {};
+        if (this.isExit(target)) range = 0 //protect the user from themselves. If it is an edge tile, we need a value of zero
         creep.memory._trav.target = {x: target.x, y: target.y, roomName: target.roomName, range: range, priority: priority};
     }
     //get an x grid in a direction from a start point
