@@ -10,6 +10,7 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 * [Lots of options](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API)
 * [Visuals](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler:-Features#show-your-path)
 * [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Use creep.Move()
+* [Intershard travel] Finds nearby portals and moves to the optimal position to get to the next shard. The more portals you find, the shorter the path across shards.
 
 ![Push/Swap animation](https://i.imgur.com/w050niD.gif)
 
@@ -31,17 +32,22 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 #### Performance considerations
 1. `Move` creates a new object in creep memory, `_trav`, which is analogous to the object used by `moveTo()` for caching the creeps path. For this reason, it will save memory to use either `Move()` or `moveTo()` with a given creep, but not both.
 2. moveOffRoad() should be used only when needed. This function has a cooldown of 20 ticks to avoid spamming CPU.
+3. For intershard travel it is important to scout out portals prior to using. The more portals, the more effective.
 
 ## WishList
 - Intergrated quad/squad movement logic.
 - Intergrated retreat logic.
-- Intershard logic. It would be nice to treat all for shards as one with an overloaded Position object that also references the shard. If the creep is moving to a another shard it will first go to the nearest portal before moving to that room.
 
 ## Documentation
 
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+
+2020-12-25
+* Happy Holidays!
+* NEW: Alpha testing of creep/powerCreep.MoveToShard. See wiki for usage.
+* OPTIMIZATIONS: Traveler will now use Memory.Traveler to store all data except creep pathing. Traveler will store room information and portal locations here for users to reference. Makes it easier to uninstall if you decide not to use it at a later time.
 
 2020-12-21
 * BUG FIX: Fixed two edge cases. One of which will set the range to 0 if the target is an exit tile to protect the user from themselves.

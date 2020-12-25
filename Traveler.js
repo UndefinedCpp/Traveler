@@ -4,7 +4,14 @@ class Traveler {
     static travelTo(creep, destination, options = {}) {
         // uncomment if you would like to register hostile rooms entered
         // this is highly recommended
+        if (!Memory.Traveler) {
+            Memory.Traveler = {}
+            Memory.Traveler.rooms = {}
+            Memory.Traveler.Portals = {}
+        }
         this.updateRoomStatus(creep.room);
+        //update portals for traveler
+        this.updatePortals(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -399,7 +406,7 @@ class Traveler {
     }
     //check if room should be avoided by findRoute algorithm
     static checkAvoid(roomName) {
-        return Memory.rooms && Memory.rooms[roomName] && Memory.rooms[roomName].avoid;
+        return Memory.Traveler.rooms[roomName] && Memory.Traveler.rooms[roomName].avoid
     }
     //check if a position is an exit
     static isExit(pos) {
@@ -424,16 +431,19 @@ class Traveler {
         });
     }
     //update memory on whether a room should be avoided based on controller owner
-    //TODO: Add whitelist functionality
+    //TODO: Add whitelist functionality..or add your own..whatever
     static updateRoomStatus(room) {
         if (!room) {
             return;
         }
+        if (!Memory.Traveler.rooms[room.name]) {
+            Memory.Traveler.rooms[room.name] = {}
+        }
         if (room.controller) {
             if (room.controller.owner && !room.controller.my) {
-                room.memory.avoid = 1;
+                Memory.Traveler.rooms[room.name].avoid = 1
             } else {
-                delete room.memory.avoid;
+                delete Memory.Traveler.rooms[room.name].avoid
             }
         }
     }
@@ -706,6 +716,132 @@ class Traveler {
         }
         return false;
     }
+    static updatePortals(room) {
+        if (!room) return
+        if (Memory.Traveler.rooms[room.name].updatetime > Game.time - 100) return
+        Memory.Traveler.rooms[room.name].updatetime = Game.time
+        
+        const portals = room.portals ? room.portals : room.find(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL})
+        if (portals.length === 0) return
+        Memory.Traveler.Portals[room.name] = {}
+        Memory.Traveler.Portals[room.name].shards = {}
+        Memory.Traveler.Portals[room.name].rooms = {}
+        for (let p of portals) {
+            if (p.destination.shard) {
+                if (!Memory.Traveler.Portals[room.name].shards[p.destination.shard]) {
+                    Memory.Traveler.Portals[room.name].shards[p.destination.shard] = {}
+                }
+                Memory.Traveler.Portals[room.name].shards[p.destination.shard][p.destination.room] = ''
+            } else {
+                //TODO: Add intrashard portals
+                Memory.Traveler.Portals[room.name].rooms[p.destination.roomName] = {}
+            }
+        }
+    }
+    static findPathToNearestPortal(creep, shard, room) {
+        const count = Game.cpu.getUsed()
+        let shards = [];
+        let shardDestIndex;
+        let shardOrgIndex
+        //get shards (not hard coded so it can change later if the game is updated with new shards)
+        for (let i in Game.cpu.shardLimits) {
+            if (i === shard) shardDestIndex = shards.length
+            if (i === Game.shard.name) shardOrgIndex = shards.length
+            shards[shards.length] = i
+        }
+        //find the nearest shard incase we don't have a portal to the destinaton shard
+        const nearestShard = shardDestIndex > shardOrgIndex ? shards[shardOrgIndex+1] : shards[shardOrgIndex-1]
+            
+        let dist = 999999
+        let xferroom
+        let nextRoom
+        let nextShard = nearestShard
+        const shardPortals = Memory.Traveler.Portals
+        for (const xferRoom in shardPortals) {
+            
+            //TODO: Make sure the portal isn't too far away
+            if (Game.map.getRoomLinearDistance(creep.room.name, xferRoom) > 10) continue;
+            //get portal destinations for the destination shard
+            for (const destRoom in shardPortals[xferRoom].shards[shard]) {
+                //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
+                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xferRoom) + Game.map.getRoomLinearDistance(destRoom, room)
+                
+                //if better set out new room
+                if (newdist < dist) {
+                    dist = newdist
+                    xferroom = xferRoom
+                    nextRoom = destRoom
+                    nextShard = shard
+                }
+            }
+            if (shard === nearestShard) continue; //same shard, skip
+            //and check ones for the next shard on the 'z axis' of the game
+            for (const destRoom in shardPortals[xferRoom].shards[nearestShard]) {
+                //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
+                //as of Dec 2020, shard 1 is the best place to make massive jumps due to the portals on shard0. We will attempt to get to that shard
+                //and then find the best portal to make the shortest path. Until then, we are just going to push to the nearest portal.
+                const newdist = ((Game.shard.name === 'shard3' || Game.shard.name === 'shard2') && shard === 'shard0') ? Game.map.getRoomLinearDistance(creep.room.name, xferRoom)
+                : Game.map.getRoomLinearDistance(creep.room.name, xferRoom, destRoom, room)
+                //if better set out new room
+                if (newdist < dist) {
+                    dist = newdist
+                    xferroom = xferRoom
+                    nextRoom = destRoom
+                    nextShard = nearestShard
+                }
+            }
+            
+        }
+        if (!xferroom) return false //probably need more portal intel to run this.. Tell the user
+        console.log('TRAVELER: ' + creep.name + ' found best move to ' + shard + ' destination of ' + room + ' through ' + nextShard  + ' - ' + nextRoom + ' cpu ' + (Game.cpu.getUsed()-count))
+        creep.memory._trav.ISM = {currentShard: Game.shard.name, shard: shard, room: room, destShard: nextShard, xferRoom: xferroom, destRoom: nextRoom}
+        return true
+    }
+    static checkShardTransferData(creep, shard, room) {
+        if (!creep.memory._trav) creep.memory._trav = {}
+        if (creep.memory._trav.ISM 
+        && creep.memory._trav.ISM.currentShard === Game.shard.name //this is in case the user pulls all their memory over to include movement
+        && creep.memory._trav.ISM.shard === shard 
+        && creep.memory._trav.ISM.room === room) {
+            return true //yay!
+        }
+        //needs new path
+        if (!this.findPathToNearestPortal(creep, shard, room)) {
+            return ERR_NO_PATH //well, damn
+        }
+        return true
+    }
+    static moveToShard(creep, shard, room, priority) {
+        const check = this.checkShardTransferData(creep, shard, room)
+        if (check !== true) {
+            return ERR_NO_PATH
+        }
+        
+        const xferData = creep.memory._trav.ISM 
+        
+        if (xferData.xferRoom === creep.room.name) {
+            let portal
+            //move to nearest portal
+            if (!xferData.portalId) {
+                portal = creep.pos.findClosestByRange(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL && s.destination.shard === xferData.destShard && s.destination.room === xferData.destRoom})
+            } else {
+                portal = Game.getObjectById(xferData.portalId)
+            }
+            
+            if (!portal) {
+                delete creep.memory._trav.ISM
+                return false
+            }
+            creep.memory._trav.ISM.portalId = portal.id
+            this.registerTarget(creep, portal, 0, priority);
+            this.travelTo(creep, portal)
+        } else {
+            let dest = new RoomPosition(25,25, xferData.xferRoom)
+            this.registerTarget(creep, dest, 0, priority);
+            this.travelTo(creep, dest, {preferHighway: true, ensurePath: true, useFindRoute: true})
+        }
+        return true
+    }
 }
 Traveler.structureMatrixCache = {};
 Traveler.creepMatrixCache = {};
@@ -731,6 +867,7 @@ PowerCreep.prototype.travelTo = Creep.prototype.travelTo;
 // call this in every room to update it's status
 Room.prototype.UpdateRoomStatus = (function() {
     Traveler.updateRoomStatus(this);
+    Traveler.updatePortals(this)
 });
 // Get a path to a destiniation... Good for building roads.
 RoomPosition.prototype.FindPathTo = (function(destination, options) {
@@ -771,6 +908,15 @@ Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     return Traveler.travelTo(this, target, opts);
 }); 
 PowerCreep.prototype.Move = Creep.prototype.Move
+
+Creep.prototype.MoveToShard = function(shard, room, priority) {
+    if (Game.shard.name !== shard) {
+        return Traveler.moveToShard(this, shard, room, priority)
+    }
+    return false
+}
+PowerCreep.prototype.MoveToShard = Creep.prototype.MoveToShard
+
 // Move a creep off road... Good for building, repairing, idling.
 Creep.prototype.MoveOffRoad = (function(target, dist, priority) {
     if (!target) {
