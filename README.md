@@ -44,6 +44,9 @@ The file itself has comments, and you can also find documentation [in the wiki](
 
 ## Changelog
 
+2020-12-28
+* OPTIMIZATIONS: Traveler now gets all shard portals. This wont be commanded unless you are doing intershard movement. Working CPU optimizations on this and usage of room portals soon.
+
 2020-12-25
 * Happy Holidays!
 * NEW: Alpha testing of creep/powerCreep.MoveToShard. See wiki for usage.

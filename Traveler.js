@@ -7,11 +7,8 @@ class Traveler {
         if (!Memory.Traveler) {
             Memory.Traveler = {}
             Memory.Traveler.rooms = {}
-            Memory.Traveler.Portals = {}
         }
         this.updateRoomStatus(creep.room);
-        //update portals for traveler
-        this.updatePortals(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -436,8 +433,9 @@ class Traveler {
         if (!room) {
             return;
         }
-        if (!Memory.Traveler.rooms[room.name]) {
-            Memory.Traveler.rooms[room.name] = {}
+        if (!Memory.Traveler) {
+            Memory.Traveler = {}
+            Memory.Traveler.rooms = {}
         }
         if (room.controller) {
             if (room.controller.owner && !room.controller.my) {
@@ -716,27 +714,34 @@ class Traveler {
         }
         return false;
     }
-    static updatePortals(room) {
-        if (!room) return
-        if (Memory.Traveler.rooms[room.name].updatetime > Game.time - 100) return
-        Memory.Traveler.rooms[room.name].updatetime = Game.time
+    static updatePortals() {
+        //Set the public data segment to active
+        RawMemory.setActiveForeignSegment('LeagueOfAutomatedNations', 97);
         
-        const portals = room.portals ? room.portals : room.find(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL})
-        if (portals.length === 0) return
-        Memory.Traveler.Portals[room.name] = {}
-        Memory.Traveler.Portals[room.name].shards = {}
-        Memory.Traveler.Portals[room.name].rooms = {}
-        for (let p of portals) {
-            if (p.destination.shard) {
-                if (!Memory.Traveler.Portals[room.name].shards[p.destination.shard]) {
-                    Memory.Traveler.Portals[room.name].shards[p.destination.shard] = {}
+        const data = JSON.parse(RawMemory.foreignSegment.data) //get the parsed data
+        Memory.Traveler.Portals = {}
+        for (const i in data) {
+            const room = data[i][0]
+            if (!Memory.Traveler.Portals[room]) {
+                Memory.Traveler.Portals[room] = {}
+            }
+            if (data[i][1] === Game.shard.name) {
+                if (!Memory.Traveler.Portals[room].rooms) {
+                    Memory.Traveler.Portals[room].rooms = {}
                 }
-                Memory.Traveler.Portals[room.name].shards[p.destination.shard][p.destination.room] = ''
+                Memory.Traveler.Portals[room].rooms[data[i][2]] = ''
             } else {
-                //TODO: Add intrashard portals
-                Memory.Traveler.Portals[room.name].rooms[p.destination.roomName] = {}
+                if (!Memory.Traveler.Portals[room].shards) {
+                    Memory.Traveler.Portals[room].shards = {}
+                }
+                if (!Memory.Traveler.Portals[room].shards[data[i][1]]) {
+                    Memory.Traveler.Portals[room].shards[data[i][1]] = {}
+                }
+                Memory.Traveler.Portals[room].shards[data[i][1]][data[i][2]] = ''
             }
         }
+        console.log('Retireved all portal information for ' + Game.shard.name)
+        Memory.Traveler.portalUpdate = Game.time
     }
     static findPathToNearestPortal(creep, shard, room) {
         const count = Game.cpu.getUsed()
@@ -761,6 +766,7 @@ class Traveler {
             
             //TODO: Make sure the portal isn't too far away
             if (Game.map.getRoomLinearDistance(creep.room.name, xferRoom) > 10) continue;
+            if (!shardPortals[xferRoom].shards) continue
             //get portal destinations for the destination shard
             for (const destRoom in shardPortals[xferRoom].shards[shard]) {
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
@@ -812,6 +818,12 @@ class Traveler {
         return true
     }
     static moveToShard(creep, shard, room, priority) {
+        if (!creep) {
+            return
+        }
+        if (!Memory.Traveler.Portals || Memory.Traveler.portalUpdate <= Game.time-10000) {
+            this.updatePortals();
+        }
         const check = this.checkShardTransferData(creep, shard, room)
         if (check !== true) {
             return ERR_NO_PATH
@@ -823,7 +835,9 @@ class Traveler {
             let portal
             //move to nearest portal
             if (!xferData.portalId) {
-                portal = creep.pos.findClosestByRange(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL && s.destination.shard === xferData.destShard && s.destination.room === xferData.destRoom})
+                portal = creep.pos.findClosestByRange(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL 
+                && s.destination.shard === xferData.destShard 
+                && s.destination.room === xferData.destRoom})
             } else {
                 portal = Game.getObjectById(xferData.portalId)
             }
@@ -867,7 +881,6 @@ PowerCreep.prototype.travelTo = Creep.prototype.travelTo;
 // call this in every room to update it's status
 Room.prototype.UpdateRoomStatus = (function() {
     Traveler.updateRoomStatus(this);
-    Traveler.updatePortals(this)
 });
 // Get a path to a destiniation... Good for building roads.
 RoomPosition.prototype.FindPathTo = (function(destination, options) {
@@ -910,6 +923,7 @@ Creep.prototype.Move = (function(target, range, priority, opts = {}) {
 PowerCreep.prototype.Move = Creep.prototype.Move
 
 Creep.prototype.MoveToShard = function(shard, room, priority) {
+    if (!shard || !room) return false
     if (Game.shard.name !== shard) {
         return Traveler.moveToShard(this, shard, room, priority)
     }
