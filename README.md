@@ -10,7 +10,7 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 * [Lots of options](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API)
 * [Visuals](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler:-Features#show-your-path)
 * [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Use creep.Move()
-* [Intershard travel] Finds nearby portals and moves to the optimal position to get to the next shard. The more portals you find, the shorter the path across shards.
+* [Intershard travel] Finds nearby portals and moves to the optimal position to get to the next shard.
 
 ![Push/Swap animation](https://i.imgur.com/w050niD.gif)
 
