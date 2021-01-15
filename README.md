@@ -35,7 +35,7 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 3. For intershard travel it is important to scout out portals prior to using. The more portals, the more effective.
 
 ## WishList
-- Intergrated quad/squad movement logic.
+- Intergrated quad/squad movement logic. This is being debated as to whether it should be allowed. Please send me your feedback.
 - Intergrated retreat logic.
 
 ## Documentation
@@ -43,6 +43,12 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+
+2021-01-15
+* BUG FIX: fixed a bug calculating creep move efficiency.
+* OPTIMIZATION: InterShard portal logic will now get, store, and use ALL shard portals when moving between shards. No need to scout them out!
+* OPTIMIZATION: Creeps will now attempt to stay off of roads if they have enough body parts to out fatigue plains/swamps. Due to restrictions in the built in path finder this is not 100%. This optimization saves on road wear and tear.
+* OPTIMIZATION: If a creep needs to push past a fat slow moving creep, the faster creep will swap with the slow one in order to pass instead of repathing.
 
 2020-12-28
 * OPTIMIZATIONS: Traveler now gets all shard portals. This wont be commanded unless you are doing intershard movement. Working CPU optimizations on this and usage of room portals soon.

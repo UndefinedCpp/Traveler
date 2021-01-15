@@ -33,8 +33,9 @@ class Traveler {
         
         //get body movement Efficiency and adjust options automatically
         const muscle = this.getCreepMoveEfficiency(creep);
-        if (muscle > 2) options.ignoreRoads = true;
-        if (muscle > 10) options.offRoad = true;
+        
+        if (muscle <= -2) options.ignoreRoads = true; //able to out fatigue plains
+        if (muscle <= -10) options.offRoad = true; //able to out fatigue swamps
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
@@ -52,6 +53,7 @@ class Traveler {
             }
             return OK;
         }
+        
         let travelData = creep.memory._trav;
         let state = this.deserializeState(travelData, destination);
         // uncomment to visualize destination
@@ -85,6 +87,21 @@ class Traveler {
                 delete travelData.path;
             }
         }
+        //if a swap is called due to a slow moving creep
+        if (travelData.swap) {
+            const blocker = Game.getObjectById(travelData.swap)
+            if (blocker && creep.pos.isNearTo(blocker)) {
+                console.log(Game.shard.name + ' Swapping ' + creep.name + ' with fast mover ' + blocker.name + ' ' + blocker.pos)
+                creep.moveTo((blocker))
+                blocker.moveTo(creep)
+                delete creep.memory._trav.path
+                delete creep.memory._trav.swap
+                delete blocker.memory._trav.path
+                return OK
+            } else {
+                delete creep.memory._trav.swap
+            }
+        }
         if (options.repath && Math.random() < options.repath) {
             // add some chance that you will find a new path randomly
             delete travelData.path;
@@ -103,7 +120,8 @@ class Traveler {
             state.cpu = _.round(cpuUsed + state.cpu);
             if (state.cpu > REPORT_CPU_THRESHOLD) {
                 // see note at end of file for more info on this
-                console.log(`TRAVELER: heavy cpu use: ${creep.name}, cpu: ${state.cpu} origin: ${creep.pos}, dest: ${destination}`);
+                console.log(Game.shard.name +' TRAVELER: heavy cpu use: ' + creep.name + ', cpu: ' + state.cpu + ' origin: ' + creep.pos + ', dest: ' + destination);
+                delete creep.memory._trav.path
             }
             let color = "orange";
             if (ret.incomplete) {
@@ -180,8 +198,17 @@ class Traveler {
                                 }
                             }
                         }
-                    } else { //blocker is fatigued, lets go around.
-                        return this.repath(creep, destination, options)
+                    } else { //blocker is fatigued, lets go around
+                        //Check for slow moving creep.
+                        const blockerMuscle = this.getCreepMoveEfficiency(blocker);
+                        const Muscle = this.getCreepMoveEfficiency(creep);
+                        if (blockerMuscle > Muscle) {
+                            console.log(creep.name + ' Swapping slow blocker, memory set for ' + blocker.name + ' ' + blocker.pos)
+                            blocker.memory._trav.swap = creep.id
+                            return creep.move(nextDirection)
+                        } else {
+                            return this.repath(creep, destination, options)
+                        }
                     }
                 }
             }
@@ -437,6 +464,9 @@ class Traveler {
             Memory.Traveler = {}
             Memory.Traveler.rooms = {}
         }
+        if (!Memory.Traveler.rooms[room.name]) {
+            Memory.Traveler.rooms[room.name] = {}
+        }
         if (room.controller) {
             if (room.controller.owner && !room.controller.my) {
                 Memory.Traveler.rooms[room.name].avoid = 1
@@ -518,9 +548,10 @@ class Traveler {
         }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
-            plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : 2,
-            swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : 10,
+            plainCost: options.offRoad ? 0.5 : options.ignoreRoads ? 0.5 : 2,
+            swampCost: options.offRoad ? 0.5 : options.ignoreRoads ? 5 : 10,
             roomCallback: callback,
+            heuristicWeight: 0,
         });
         if (ret.incomplete && options.ensurePath) {
             if (options.useFindRoute === undefined) {
@@ -528,7 +559,7 @@ class Traveler {
                 // can happen for situations where the creep would have to take an uncommonly indirect path
                 // options.allowedRooms and options.routeCallback can also be used to handle this situation
                 if (roomDistance <= 2) {
-                    console.log(`TRAVELER: path failed without findroute, trying with options.useFindRoute = true`);
+                    console.log(`${Game.shard.name} TRAVELER: path failed without findroute, trying with options.useFindRoute = true`);
                     console.log(`from: ${origin}, destination: ${destination}`);
                     options.useFindRoute = true;
                     ret = this.findTravelPath(origin, destination, options);
@@ -714,11 +745,28 @@ class Traveler {
         }
         return false;
     }
+    static getXYGridsFromRoomName(roomName) {
+        let [name,h,x,v,y] = roomName.match(/^([WE])([0-9]+)([NS])([0-9]+)$/);
+        x = (h == 'W') ? 0-x-1 : parseInt(x)
+		y = (v == 'S') ? 0-y-1 : parseInt(y)
+		return [x,y]
+    }
+    static getRoomNameFromWorldPosition(x, y) {
+        const long = y < 0 ? 'S' : 'N'
+        const lat = x < 0 ? 'W' : 'E'
+        const xpos = x < 0 ? 0-x-1 : x
+        const ypos = y < 0 ? 0-y-1 : y
+        return lat + xpos + long + ypos
+    }
+    
     static updatePortals() {
         //Set the public data segment to active
         RawMemory.setActiveForeignSegment('LeagueOfAutomatedNations', 97);
         
         const data = JSON.parse(RawMemory.foreignSegment.data) //get the parsed data
+        if (data.length < 10) {
+            return
+        }
         Memory.Traveler.Portals = {}
         for (const i in data) {
             const room = data[i][0]
@@ -740,7 +788,7 @@ class Traveler {
                 Memory.Traveler.Portals[room].shards[data[i][1]][data[i][2]] = ''
             }
         }
-        console.log('Retireved all portal information for ' + Game.shard.name)
+        console.log('Retrieved all portal information for ' + Game.shard.name)
         Memory.Traveler.portalUpdate = Game.time
     }
     static findPathToNearestPortal(creep, shard, room) {
@@ -756,48 +804,75 @@ class Traveler {
         }
         //find the nearest shard incase we don't have a portal to the destinaton shard
         const nearestShard = shardDestIndex > shardOrgIndex ? shards[shardOrgIndex+1] : shards[shardOrgIndex-1]
-            
+        
+        //find nearby shard portal rooms. They only appear in highway intersections
+        let [name,h,x,v,y] = creep.room.name.match(/^([WE])([0-9]+)([NS])([0-9]+)$/);
+        let x10 = Math.ceil(x/10)*10
+        let y10 = Math.ceil(y/10)*10
+        let xferRooms = []
+        
+        xferRooms.push(h+x10+v+y10)//top Left of sector
+        xferRooms.push(h+(x10-10)+v+y10) //top right of sector
+        xferRooms.push(h+x10+v+(y10-10)) //bottom left of sector
+        xferRooms.push(h+(x10-10)+v+(y10-10)) //bottom right of sector
+        //if near the cross roads, get the rooms on the other side with portals
+        const v1 = v === 'S' ? 'N' : 'S' //swithing lat and long
+        const h1 = h === 'W' ? 'E' : 'W'
+        //near the 0 axis cross road, get the rooms on the other side with portals
+        if (x10 === 10) {
+            xferRooms.push(h1+'0'+v+'0')
+            xferRooms.push(h1+'0'+v+'10')
+        }
+        //near the 0 axis cross road, get the rooms on the other side with portals
+        if (y10 === 10) {
+            xferRooms.push(h+'0'+v1+'0')
+            xferRooms.push(h+'10'+v1+'0')
+        }
+        //near the 0,0 axis cross road, get the roomscaddy corner
+        if (x10 === 10 && y10 === 10) {
+            xferRooms.push(h1+'0'+v1+'0')
+        }
+        //look through all these portals for the best routing
         let dist = 999999
         let xferroom
         let nextRoom
         let nextShard = nearestShard
         const shardPortals = Memory.Traveler.Portals
-        for (const xferRoom in shardPortals) {
-            
-            //TODO: Make sure the portal isn't too far away
-            if (Game.map.getRoomLinearDistance(creep.room.name, xferRoom) > 10) continue;
-            if (!shardPortals[xferRoom].shards) continue
-            //get portal destinations for the destination shard
-            for (const destRoom in shardPortals[xferRoom].shards[shard]) {
+        
+        for (let xroom of xferRooms) {
+            if (!shardPortals[xroom] || !shardPortals[xroom].shards) {
+                continue; //no shards in this rooms memory
+            }
+            for (const destRoom in shardPortals[xroom].shards[shard]) {
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
-                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xferRoom) + Game.map.getRoomLinearDistance(destRoom, room)
+                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xroom) + Game.map.getRoomLinearDistance(destRoom, room)
                 
-                //if better set out new room
+                //if better set our new room
                 if (newdist < dist) {
                     dist = newdist
-                    xferroom = xferRoom
+                    xferroom = xroom
                     nextRoom = destRoom
                     nextShard = shard
                 }
             }
             if (shard === nearestShard) continue; //same shard, skip
             //and check ones for the next shard on the 'z axis' of the game
-            for (const destRoom in shardPortals[xferRoom].shards[nearestShard]) {
+            for (const destRoom in shardPortals[xroom].shards[nearestShard]) {
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
                 //as of Dec 2020, shard 1 is the best place to make massive jumps due to the portals on shard0. We will attempt to get to that shard
                 //and then find the best portal to make the shortest path. Until then, we are just going to push to the nearest portal.
-                const newdist = ((Game.shard.name === 'shard3' || Game.shard.name === 'shard2') && shard === 'shard0') ? Game.map.getRoomLinearDistance(creep.room.name, xferRoom)
-                : Game.map.getRoomLinearDistance(creep.room.name, xferRoom, destRoom, room)
-                //if better set out new room
+                const newdist = ((Game.shard.name === 'shard3' || Game.shard.name === 'shard2') && shard === 'shard0') ? Game.map.getRoomLinearDistance(creep.room.name, xroom)
+                : Game.map.getRoomLinearDistance(creep.room.name, xroom, destRoom, room)
+                //if better set our new room
                 if (newdist < dist) {
                     dist = newdist
-                    xferroom = xferRoom
+                    xferroom = xroom
                     nextRoom = destRoom
                     nextShard = nearestShard
                 }
             }
-            
         }
+        
         if (!xferroom) return false //probably need more portal intel to run this.. Tell the user
         console.log('TRAVELER: ' + creep.name + ' found best move to ' + shard + ' destination of ' + room + ' through ' + nextShard  + ' - ' + nextRoom + ' cpu ' + (Game.cpu.getUsed()-count))
         creep.memory._trav.ISM = {currentShard: Game.shard.name, shard: shard, room: room, destShard: nextShard, xferRoom: xferroom, destRoom: nextRoom}
@@ -821,7 +896,7 @@ class Traveler {
         if (!creep) {
             return
         }
-        if (!Memory.Traveler.Portals || Memory.Traveler.portalUpdate <= Game.time-10000) {
+        if (!Memory.Traveler.Portals || !Memory.Traveler.portalUpdate || Memory.Traveler.portalUpdate <= Game.time-10000) {
             this.updatePortals();
         }
         const check = this.checkShardTransferData(creep, shard, room)
