@@ -9,8 +9,9 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 * Effective [long-range pathing](https://github.com/bonzaiferroni/bonzAI/wiki/Improving-on-moveTo's-efficiency#very-long-distances-path-length-1200) 
 * [Lots of options](https://github.com/bonzaiferroni/Traveler/wiki/Traveler-API)
 * [Visuals](https://github.com/bonzaiferroni/Traveler/wiki/Improving-Traveler:-Features#show-your-path)
+* [Intershard travel] Finds nearby portals and moves to the optimal position to get to the next shard. The more portals you find, the shorter the path across shards.
+* [Save on road maintenance] Creeps will path off of roads if they have enough move parts to transverse plains and swamps without losing time.
 * [Pushing/Swapping] If a creep is in the way, it will either push that creep towards the target, or swap with it if that creep is a lower priority. Use creep.Move()
-* [Intershard travel] Finds nearby portals and moves to the optimal position to get to the next shard.
 
 ![Push/Swap animation](https://i.imgur.com/w050niD.gif)
 
@@ -23,7 +24,6 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
     * (in the sim or some private servers you might need to use `'Traveler.js'`)
 3. Replace situations where you used `moveTo` with `Move(target, range, priority, options)`.
 ```
-    // creep.moveTo(myDestination);
     creep.Move(myDestination, range, priority, opts = {}); (see wiki for more)
 ```
 
@@ -32,7 +32,6 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 #### Performance considerations
 1. `Move` creates a new object in creep memory, `_trav`, which is analogous to the object used by `moveTo()` for caching the creeps path. For this reason, it will save memory to use either `Move()` or `moveTo()` with a given creep, but not both.
 2. moveOffRoad() should be used only when needed. This function has a cooldown of 20 ticks to avoid spamming CPU.
-3. For intershard travel it is important to scout out portals prior to using. The more portals, the more effective.
 
 ## WishList
 - Intergrated quad/squad movement logic. This is being debated as to whether it should be allowed. Please send me your feedback.
@@ -43,6 +42,9 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+
+2021-01-24
+* BUG FIX: Creeps would sometimes take a longer path to stay off roads when there was a shorter viable path. Fixed. Creeps will now always take the shortest path and only path off roads if it will cost no extra moves.
 
 2021-01-15
 * BUG FIX: fixed a bug calculating creep move efficiency.

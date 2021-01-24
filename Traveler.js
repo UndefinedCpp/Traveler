@@ -5,8 +5,8 @@ class Traveler {
         // uncomment if you would like to register hostile rooms entered
         // this is highly recommended
         if (!Memory.Traveler) {
-            Memory.Traveler = {}
-            Memory.Traveler.rooms = {}
+            Memory.Traveler = {};
+            Memory.Traveler.rooms = {};
         }
         this.updateRoomStatus(creep.room);
         if (!destination) {
@@ -23,7 +23,7 @@ class Traveler {
         }
         const repathing = options.repathing ? options.repathing : false
         if (creep.memory._trav.lastMove === Game.time && !repathing) {
-            return false;
+            return OK;
         }
         if (!options.push) creep.memory._trav.lastMove = Game.time;
         //initialize our options
@@ -33,14 +33,17 @@ class Traveler {
         
         //get body movement Efficiency and adjust options automatically
         const muscle = this.getCreepMoveEfficiency(creep);
+        options.muscle = muscle //sets this hidden option to allow calculation into findPath.
         
-        if (muscle <= -2) options.ignoreRoads = true; //able to out fatigue plains
-        if (muscle <= -10) options.offRoad = true; //able to out fatigue swamps
+        if (muscle >= 2) options.ignoreRoads = true; //able to out fatigue plains
+        if (muscle >= 10) options.offRoad = true; //able to out fatigue swamps
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
-        if (options.range && rangeToDestination <= options.range && !this.isExit(creep.pos)) {
-            return OK;
+        if (options.range && rangeToDestination <= options.range) {
+            if (!this.isExit(creep.pos)) {
+                return OK;
+            }
         }
         else if (rangeToDestination <= 1) {
             if (rangeToDestination === 1 && !options.range) {
@@ -91,7 +94,7 @@ class Traveler {
         if (travelData.swap) {
             const blocker = Game.getObjectById(travelData.swap)
             if (blocker && creep.pos.isNearTo(blocker)) {
-                console.log(Game.shard.name + ' Swapping ' + creep.name + ' with fast mover ' + blocker.name + ' ' + blocker.pos)
+                //console.log(Game.shard.name + ' Swapping ' + creep.name + ' with fast mover ' + blocker.name + ' ' + blocker.pos)
                 creep.moveTo((blocker))
                 blocker.moveTo(creep)
                 delete creep.memory._trav.path
@@ -156,7 +159,7 @@ class Traveler {
         }
         
         //Don't push
-        if (!(state.stuckCount > 0  || options.push)) {
+        if ((!(state.stuckCount > 0  || options.push)) || this.isExit(creep.pos)) {
             return creep.move(nextDirection);
         }
         //Find if a creep is blocking our movement
@@ -167,7 +170,7 @@ class Traveler {
                 //hasn't run yet... Lets swap in case the creep is idle
                 this.travelTo(blocker, creep.pos, {range: 0}); //swap
                 if (blocker._trav){
-                    blocker._trav.state[STATE_STUCK] = 999 //force repath in case it moved out of range
+                    blocker._trav.state[STATE_STUCK] = 999; //force repath in case it moved out of range
                 }
             } else {
                 if (blocker.memory._trav.lastMove < Game.time-2) { //blocker has not moved for 2 ticks.. Working or idle
@@ -178,23 +181,23 @@ class Traveler {
                         const currentRange = blocker.pos.getRangeTo(blockerTarget);
                         //Can we move closer?
                         if (currentRange > 1) {
-                            this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: true}); //push to target
+                            this.travelTo(blocker,blockerTarget, {push: true, range: 1, repath: true}); //push blocker closer to target
                         } else {
                             //if a higher priority, swap
                             if (priority > blockerPriority) {
                                 //move to a new free position if able
                                 if (!this.moveToNewFreePosition(blocker, blockerTarget)) {
-                                    this.travelTo(blocker, creep.pos, {push:true, range: 0})
-                                    delete blocker.memory._trav.path //force repath in case it moved out of range
+                                    this.travelTo(blocker, creep.pos, {push:true, range: 0});
+                                    delete blocker.memory._trav.path; //force repath in case it moved out of range
                                 }
                             } else {
                                 if (blockerRange !== 0) {
                                     //less than or equal priority.. Can you move the blocker to an adjacent position and make room for us?
                                     if (!this.moveToNewFreePosition(blocker, blockerTarget)){
-                                        return this.repath(creep, destination, options)
+                                        return this.repath(creep, destination, options);
                                     }
                                 } else {
-                                    return this.repath(creep, destination, options)
+                                    return this.repath(creep, destination, options);
                                 }
                             }
                         }
@@ -203,11 +206,11 @@ class Traveler {
                         const blockerMuscle = this.getCreepMoveEfficiency(blocker);
                         const Muscle = this.getCreepMoveEfficiency(creep);
                         if (blockerMuscle > Muscle) {
-                            console.log(creep.name + ' Swapping slow blocker, memory set for ' + blocker.name + ' ' + blocker.pos)
-                            blocker.memory._trav.swap = creep.id
-                            return creep.move(nextDirection)
+                            //console.log(creep.name + ' Swapping slow blocker, memory set for ' + blocker.name + ' ' + blocker.pos)
+                            blocker.memory._trav.swap = creep.id;
+                            return creep.move(nextDirection);
                         } else {
-                            return this.repath(creep, destination, options)
+                            return this.repath(creep, destination, options);
                         }
                     }
                 }
@@ -218,17 +221,17 @@ class Traveler {
     //calls a same tick repath
     static repath(creep, destination, options) {
         creep.memory._trav.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-        return this.travelTo(creep, destination, options, {repath: true})
+        return this.travelTo(creep, destination, options, {repath: true});
         
     }
     //Finds a new free position near the target and moves there
     static moveToNewFreePosition(blocker, blockerTarget) {
         const newPosition = this.findNewFreePosition(blocker, blockerTarget);
         if (newPosition) {
-            this.travelTo(blocker, newPosition, {range: 0, push: true})
-            return true
+            this.travelTo(blocker, newPosition, {range: 0, push: true});
+            return true;
         }
-        return false
+        return false;
     }
     //normalized to desitnations passed to a position instead of a object with a pos in it
     static normalizePos(destination) {
@@ -369,7 +372,7 @@ class Traveler {
     }
     //gets the move efficiency of a creep based on it's number of move parts and boost realative to it's size
     static getCreepMoveEfficiency(creep) {
-        if (creep instanceof PowerCreep) return 9999; //no fatgiue!
+        if (!creep.body) return 9999; //no fatgiue! PowerCreep!
         let totalreduction= 0;
         let totalparts = 0;
         let used = creep.store.getUsedCapacity();
@@ -390,7 +393,7 @@ class Traveler {
                     break;
             }
         })
-        return totalparts > 0 ? totalreduction/totalparts : totalreduction;
+        return totalparts > 0 ? 0-totalreduction/totalparts : totalreduction;
     }
     //gets a pos to a direction from a starting point
     static getPosFromDirection(source, dir) {
@@ -548,10 +551,10 @@ class Traveler {
         }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
-            plainCost: options.offRoad ? 0.5 : options.ignoreRoads ? 0.5 : 2,
-            swampCost: options.offRoad ? 0.5 : options.ignoreRoads ? 5 : 10,
+            plainCost: options.offRoad ? 0.25 : options.ignoreRoads ? 0.25 : options.muscle ? Math.ceil(2/options.muscle) : 2,
+            swampCost: options.offRoad ? 0.25 : options.ignoreRoads ? 5 : options.muscle ? Math.ceil(10/options.muscle) : 10,
             roomCallback: callback,
-            heuristicWeight: 0,
+            heuristicWeight: 0.2,
         });
         if (ret.incomplete && options.ensurePath) {
             if (options.useFindRoute === undefined) {
@@ -737,107 +740,111 @@ class Traveler {
         if (state.lastCoord !== undefined) {
             if (this.sameCoord(creep.pos, state.lastCoord)) {
                 // didn't move
-                return true
+                return true;
             } else if (this.isExit(creep.pos) && this.isExit(state.lastCoord)) {
                 // moved against exit
-                return true
+                return true;
             }
         }
         return false;
     }
     static getXYGridsFromRoomName(roomName) {
         let [name,h,x,v,y] = roomName.match(/^([WE])([0-9]+)([NS])([0-9]+)$/);
-        x = (h == 'W') ? 0-x-1 : parseInt(x)
-		y = (v == 'S') ? 0-y-1 : parseInt(y)
-		return [x,y]
+        x = (h == 'W') ? 0-x-1 : parseInt(x);
+		y = (v == 'S') ? 0-y-1 : parseInt(y);
+		return [x,y];
     }
     static getRoomNameFromWorldPosition(x, y) {
-        const long = y < 0 ? 'S' : 'N'
-        const lat = x < 0 ? 'W' : 'E'
-        const xpos = x < 0 ? 0-x-1 : x
-        const ypos = y < 0 ? 0-y-1 : y
-        return lat + xpos + long + ypos
+        const long = y < 0 ? 'S' : 'N';
+        const lat = x < 0 ? 'W' : 'E';
+        const xpos = x < 0 ? 0-x-1 : x;
+        const ypos = y < 0 ? 0-y-1 : y;
+        return lat + xpos + long + ypos;
     }
     
     static updatePortals() {
         //Set the public data segment to active
         RawMemory.setActiveForeignSegment('LeagueOfAutomatedNations', 97);
         
-        const data = JSON.parse(RawMemory.foreignSegment.data) //get the parsed data
+        const data = JSON.parse(RawMemory.foreignSegment.data); //get the parsed data
         if (data.length < 10) {
-            return
+            return;
         }
         Memory.Traveler.Portals = {}
         for (const i in data) {
-            const room = data[i][0]
+            const room = data[i][0];
             if (!Memory.Traveler.Portals[room]) {
-                Memory.Traveler.Portals[room] = {}
+                Memory.Traveler.Portals[room] = {};
             }
             if (data[i][1] === Game.shard.name) {
                 if (!Memory.Traveler.Portals[room].rooms) {
-                    Memory.Traveler.Portals[room].rooms = {}
+                    Memory.Traveler.Portals[room].rooms = {};
                 }
-                Memory.Traveler.Portals[room].rooms[data[i][2]] = ''
+                Memory.Traveler.Portals[room].rooms[data[i][2]] = '';
             } else {
                 if (!Memory.Traveler.Portals[room].shards) {
-                    Memory.Traveler.Portals[room].shards = {}
+                    Memory.Traveler.Portals[room].shards = {};
                 }
                 if (!Memory.Traveler.Portals[room].shards[data[i][1]]) {
-                    Memory.Traveler.Portals[room].shards[data[i][1]] = {}
+                    Memory.Traveler.Portals[room].shards[data[i][1]] = {};
                 }
-                Memory.Traveler.Portals[room].shards[data[i][1]][data[i][2]] = ''
+                Memory.Traveler.Portals[room].shards[data[i][1]][data[i][2]] = '';
             }
         }
-        console.log('Retrieved all portal information for ' + Game.shard.name)
-        Memory.Traveler.portalUpdate = Game.time
+        console.log('Retrieved all portal information for ' + Game.shard.name);
+        Memory.Traveler.portalUpdate = Game.time;
     }
     static findPathToNearestPortal(creep, shard, room) {
         const count = Game.cpu.getUsed()
         let shards = [];
         let shardDestIndex;
-        let shardOrgIndex
+        let shardOrgIndex;
         //get shards (not hard coded so it can change later if the game is updated with new shards)
         for (let i in Game.cpu.shardLimits) {
-            if (i === shard) shardDestIndex = shards.length
-            if (i === Game.shard.name) shardOrgIndex = shards.length
-            shards[shards.length] = i
+            if (i === shard) {
+                shardDestIndex = shards.length;
+            }
+            if (i === Game.shard.name) {
+                shardOrgIndex = shards.length;
+            }
+            shards[shards.length] = i;
         }
         //find the nearest shard incase we don't have a portal to the destinaton shard
-        const nearestShard = shardDestIndex > shardOrgIndex ? shards[shardOrgIndex+1] : shards[shardOrgIndex-1]
+        const nearestShard = shardDestIndex > shardOrgIndex ? shards[shardOrgIndex+1] : shards[shardOrgIndex-1];
         
         //find nearby shard portal rooms. They only appear in highway intersections
         let [name,h,x,v,y] = creep.room.name.match(/^([WE])([0-9]+)([NS])([0-9]+)$/);
-        let x10 = Math.ceil(x/10)*10
-        let y10 = Math.ceil(y/10)*10
-        let xferRooms = []
+        let x10 = Math.ceil(x/10)*10;
+        let y10 = Math.ceil(y/10)*10;
+        let xferRooms = [];
         
-        xferRooms.push(h+x10+v+y10)//top Left of sector
-        xferRooms.push(h+(x10-10)+v+y10) //top right of sector
-        xferRooms.push(h+x10+v+(y10-10)) //bottom left of sector
-        xferRooms.push(h+(x10-10)+v+(y10-10)) //bottom right of sector
+        xferRooms.push(h+x10+v+y10);//top Left of sector
+        xferRooms.push(h+(x10-10)+v+y10); //top right of sector
+        xferRooms.push(h+x10+v+(y10-10)); //bottom left of sector
+        xferRooms.push(h+(x10-10)+v+(y10-10)); //bottom right of sector
         //if near the cross roads, get the rooms on the other side with portals
-        const v1 = v === 'S' ? 'N' : 'S' //swithing lat and long
-        const h1 = h === 'W' ? 'E' : 'W'
+        const v1 = v === 'S' ? 'N' : 'S'; //swithing lat and long
+        const h1 = h === 'W' ? 'E' : 'W';
         //near the 0 axis cross road, get the rooms on the other side with portals
         if (x10 === 10) {
-            xferRooms.push(h1+'0'+v+'0')
-            xferRooms.push(h1+'0'+v+'10')
+            xferRooms.push(h1+'0'+v+'0');
+            xferRooms.push(h1+'0'+v+'10');
         }
         //near the 0 axis cross road, get the rooms on the other side with portals
         if (y10 === 10) {
-            xferRooms.push(h+'0'+v1+'0')
-            xferRooms.push(h+'10'+v1+'0')
+            xferRooms.push(h+'0'+v1+'0');
+            xferRooms.push(h+'10'+v1+'0');
         }
         //near the 0,0 axis cross road, get the roomscaddy corner
         if (x10 === 10 && y10 === 10) {
-            xferRooms.push(h1+'0'+v1+'0')
+            xferRooms.push(h1+'0'+v1+'0');
         }
         //look through all these portals for the best routing
-        let dist = 999999
-        let xferroom
-        let nextRoom
-        let nextShard = nearestShard
-        const shardPortals = Memory.Traveler.Portals
+        let dist = 999999;
+        let xferroom;
+        let nextRoom;
+        let nextShard = nearestShard;
+        const shardPortals = Memory.Traveler.Portals;
         
         for (let xroom of xferRooms) {
             if (!shardPortals[xroom] || !shardPortals[xroom].shards) {
@@ -845,14 +852,14 @@ class Traveler {
             }
             for (const destRoom in shardPortals[xroom].shards[shard]) {
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
-                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xroom) + Game.map.getRoomLinearDistance(destRoom, room)
+                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xroom) + Game.map.getRoomLinearDistance(destRoom, room);
                 
                 //if better set our new room
                 if (newdist < dist) {
-                    dist = newdist
-                    xferroom = xroom
-                    nextRoom = destRoom
-                    nextShard = shard
+                    dist = newdist;
+                    xferroom = xroom;
+                    nextRoom = destRoom;
+                    nextShard = shard;
                 }
             }
             if (shard === nearestShard) continue; //same shard, skip
@@ -862,49 +869,51 @@ class Traveler {
                 //as of Dec 2020, shard 1 is the best place to make massive jumps due to the portals on shard0. We will attempt to get to that shard
                 //and then find the best portal to make the shortest path. Until then, we are just going to push to the nearest portal.
                 const newdist = ((Game.shard.name === 'shard3' || Game.shard.name === 'shard2') && shard === 'shard0') ? Game.map.getRoomLinearDistance(creep.room.name, xroom)
-                : Game.map.getRoomLinearDistance(creep.room.name, xroom, destRoom, room)
+                : Game.map.getRoomLinearDistance(creep.room.name, xroom, destRoom, room);
                 //if better set our new room
                 if (newdist < dist) {
-                    dist = newdist
-                    xferroom = xroom
-                    nextRoom = destRoom
-                    nextShard = nearestShard
+                    dist = newdist;
+                    xferroom = xroom;
+                    nextRoom = destRoom;
+                    nextShard = nearestShard;
                 }
             }
         }
         
         if (!xferroom) return false //probably need more portal intel to run this.. Tell the user
-        console.log('TRAVELER: ' + creep.name + ' found best move to ' + shard + ' destination of ' + room + ' through ' + nextShard  + ' - ' + nextRoom + ' cpu ' + (Game.cpu.getUsed()-count))
-        creep.memory._trav.ISM = {currentShard: Game.shard.name, shard: shard, room: room, destShard: nextShard, xferRoom: xferroom, destRoom: nextRoom}
+        console.log('TRAVELER: ' + creep.name + ' found best move to ' + shard + ' destination of ' + room + ' through ' + nextShard  + ' - ' + nextRoom + ' cpu ' + (Game.cpu.getUsed()-count));
+        creep.memory._trav.ISM = {currentShard: Game.shard.name, shard: shard, room: room, destShard: nextShard, xferRoom: xferroom, destRoom: nextRoom};
         return true
     }
     static checkShardTransferData(creep, shard, room) {
-        if (!creep.memory._trav) creep.memory._trav = {}
+        if (!creep.memory._trav) {
+            creep.memory._trav = {};
+        }
         if (creep.memory._trav.ISM 
         && creep.memory._trav.ISM.currentShard === Game.shard.name //this is in case the user pulls all their memory over to include movement
         && creep.memory._trav.ISM.shard === shard 
         && creep.memory._trav.ISM.room === room) {
-            return true //yay!
+            return true; //yay!
         }
         //needs new path
         if (!this.findPathToNearestPortal(creep, shard, room)) {
-            return ERR_NO_PATH //well, damn
+            return ERR_NO_PATH; //well, damn
         }
-        return true
+        return true;
     }
     static moveToShard(creep, shard, room, priority) {
         if (!creep) {
-            return
+            return; //dafuq?
         }
         if (!Memory.Traveler.Portals || !Memory.Traveler.portalUpdate || Memory.Traveler.portalUpdate <= Game.time-10000) {
             this.updatePortals();
         }
-        const check = this.checkShardTransferData(creep, shard, room)
+        const check = this.checkShardTransferData(creep, shard, room);
         if (check !== true) {
-            return ERR_NO_PATH
+            return ERR_NO_PATH;
         }
         
-        const xferData = creep.memory._trav.ISM 
+        const xferData = creep.memory._trav.ISM ;
         
         if (xferData.xferRoom === creep.room.name) {
             let portal
@@ -912,20 +921,20 @@ class Traveler {
             if (!xferData.portalId) {
                 portal = creep.pos.findClosestByRange(FIND_STRUCTURES, {filter: s => s.structureType === STRUCTURE_PORTAL 
                 && s.destination.shard === xferData.destShard 
-                && s.destination.room === xferData.destRoom})
+                && s.destination.room === xferData.destRoom});
             } else {
-                portal = Game.getObjectById(xferData.portalId)
+                portal = Game.getObjectById(xferData.portalId);
             }
             
             if (!portal) {
-                delete creep.memory._trav.ISM
-                return false
+                delete creep.memory._trav.ISM;
+                return false;
             }
-            creep.memory._trav.ISM.portalId = portal.id
+            creep.memory._trav.ISM.portalId = portal.id;
             this.registerTarget(creep, portal, 0, priority);
-            this.travelTo(creep, portal)
+            this.travelTo(creep, portal);
         } else {
-            let dest = new RoomPosition(25,25, xferData.xferRoom)
+            let dest = new RoomPosition(25,25, xferData.xferRoom);
             this.registerTarget(creep, dest, 0, priority);
             this.travelTo(creep, dest, {preferHighway: true, ensurePath: true, useFindRoute: true})
         }
@@ -970,10 +979,10 @@ Room.prototype.GetDistanceToRoom = (function(destination) {
 // Add you own code here to interface with traveler
 Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     if (!target) {
-        return false;
+        return ERR_INVALID_ARGS;
     }
     if (this.body && this.getActiveBodyparts(MOVE) === 0) {
-        return false;
+        return ERR_NO_BODYPART;
     }
     if (range === undefined) {
         range = 1;
@@ -984,9 +993,6 @@ Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     opts.range = range;
     opts.priority = priority;
     Traveler.registerTarget(this, target, opts.range, opts.priority);
-    if (this.pos.getRangeTo(target) <= range) {
-        return true;
-    }
     if (target.pos && target.pos.roomName !== this.room.name) {
         opts.preferHighway = true;
         opts.ensurePath = true;
@@ -995,21 +1001,23 @@ Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     }
     return Traveler.travelTo(this, target, opts);
 }); 
-PowerCreep.prototype.Move = Creep.prototype.Move
+PowerCreep.prototype.Move = Creep.prototype.Move;
 
 Creep.prototype.MoveToShard = function(shard, room, priority) {
-    if (!shard || !room) return false
-    if (Game.shard.name !== shard) {
-        return Traveler.moveToShard(this, shard, room, priority)
+    if (!shard || !room) {
+        return ERR_INVALID_ARGS;
     }
-    return false
+    if (Game.shard.name !== shard) {
+        return Traveler.moveToShard(this, shard, room, priority);
+    }
+    return OK;
 }
-PowerCreep.prototype.MoveToShard = Creep.prototype.MoveToShard
+PowerCreep.prototype.MoveToShard = Creep.prototype.MoveToShard;
 
 // Move a creep off road... Good for building, repairing, idling.
 Creep.prototype.MoveOffRoad = (function(target, dist, priority) {
     if (!target) {
-        return false;
+        return ERR_INVALID_ARGS;
     }
     if (priority === undefined) {
         priority = 1;
@@ -1019,6 +1027,9 @@ Creep.prototype.MoveOffRoad = (function(target, dist, priority) {
     }
     if (target.pos) {
         target = target.pos;
+    }
+    if (this.pos.getRangeTo(target) > dist) {
+        return this.Move(target, dist, priority);
     }
     Traveler.registerTarget(this, target, dist, priority);
     return Traveler.moveOffRoad(this, target, dist, priority);
