@@ -25,18 +25,10 @@ class Traveler {
         if (creep.memory._trav.lastMove === Game.time && !repathing) {
             return OK;
         }
-        if (!options.push) creep.memory._trav.lastMove = Game.time;
         //initialize our options
         const range = options.range ? options.range : 1;
         const priority = options.priority ? options.priority : 1;
         destination = this.normalizePos(destination);
-        
-        //get body movement Efficiency and adjust options automatically
-        const muscle = this.getCreepMoveEfficiency(creep);
-        options.muscle = muscle //sets this hidden option to allow calculation into findPath.
-        
-        if (muscle >= 2) options.ignoreRoads = true; //able to out fatigue plains
-        if (muscle >= 10) options.offRoad = true; //able to out fatigue swamps
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
@@ -52,13 +44,22 @@ class Traveler {
                     options.returnData.nextPos = destination;
                     options.returnData.path = direction.toString();
                 }
+                creep.memory._trav.lastMove = Game.time;
                 return creep.move(direction);
             }
             return OK;
         }
         
+        //get body movement Efficiency and adjust options automatically
+        const muscle = this.getCreepMoveEfficiency(creep);
+        options.muscle = muscle //sets this hidden option to allow calculation into findPath.
+        
+        if (muscle >= 2) options.ignoreRoads = true; //able to out fatigue plains
+        if (muscle >= 10) options.offRoad = true; //able to out fatigue swamps
+        
         let travelData = creep.memory._trav;
         let state = this.deserializeState(travelData, destination);
+        creep.memory._trav.lastMove = Game.time;
         // uncomment to visualize destination
         // this.circle(destination.pos, "orange");
         // check if creep is stuck
@@ -124,7 +125,7 @@ class Traveler {
             if (state.cpu > REPORT_CPU_THRESHOLD) {
                 // see note at end of file for more info on this
                 console.log(Game.shard.name +' TRAVELER: heavy cpu use: ' + creep.name + ', cpu: ' + state.cpu + ' origin: ' + creep.pos + ', dest: ' + destination);
-                delete creep.memory._trav.path
+                creep.memory._trav = {}
             }
             let color = "orange";
             if (ret.incomplete) {
@@ -306,7 +307,7 @@ class Traveler {
                 break;
         }
         const t = new Room.Terrain(creep.room.name);
-        const structureMatrix = this.getStructureMatrix(creep.room, false);
+        const structureMatrix = this.getStructureMatrix(creep.room, {freshMatrix: false});
         const creepMatrix = this.getCreepMatrix(creep.room, false);
         for (let o in offsets) {
             //Out of bounds/exit
@@ -343,7 +344,7 @@ class Traveler {
             return true;
         }
         const t = new Room.Terrain(creep.room.name);
-        const structureMatrix = this.getStructureMatrix(creep.room, false);
+        const structureMatrix = this.getStructureMatrix(creep.room, {freshMatrix: false});
         const creepMatrix = this.getCreepMatrix(creep.room, false);
         let positions = [];
         let offsets = []
@@ -495,6 +496,7 @@ class Traveler {
         // check to see whether findRoute should be used
         let roomDistance = Game.map.getRoomLinearDistance(origin.roomName, destination.roomName);
         let allowedRooms = options.route;
+        let heuristic = options.heuristic ? options.heuristic : 1.2
         if (!allowedRooms && (options.useFindRoute || (options.useFindRoute === undefined && roomDistance > 2))) {
             let route = this.findRoute(origin.roomName, destination.roomName, options);
             if (route) {
@@ -520,7 +522,7 @@ class Traveler {
                         Traveler.addCreepsToMatrix(room, matrix);
                     }
                 } else if (options.ignoreCreeps || roomName !== originRoomName) {
-                    matrix = this.getStructureMatrix(room, options.freshMatrix);
+                    matrix = this.getStructureMatrix(room, options);
                 } else {
                     matrix = this.getCreepMatrix(room);
                 }
@@ -551,10 +553,13 @@ class Traveler {
         }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
-            plainCost: options.offRoad ? 0.25 : options.ignoreRoads ? 0.25 : options.muscle ? Math.ceil(2/options.muscle) : 2,
-            swampCost: options.offRoad ? 0.25 : options.ignoreRoads ? 5 : options.muscle ? Math.ceil(10/options.muscle) : 10,
+            //Regular Creep road 1, plains 2, swamp 10                          | path regular road 1, plains 2, swamp 10
+            //creep off road: road 2, plains 1, swamp 1                         | path off road raod 1, plains 1, swamp 10
+            //creep ignore roads: roads 2, plains 1, swamp muscle               | path ignore road 1, plains 1, swamp 5
+            plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : 2,
+            swampCost: options.offRoad ? 1 : options.muscle ? Math.ceil(20/options.muscle) : options.ignoreRoads ? 5 : 10,
             roomCallback: callback,
-            heuristicWeight: 0.2,
+            heuristicWeight: heuristic,
         });
         if (ret.incomplete && options.ensurePath) {
             if (options.useFindRoute === undefined) {
@@ -646,19 +651,22 @@ class Traveler {
         }
     }
     //build a cost matrix based on structures in the room. Will be cached for more than one tick. Requires vision.
-    static getStructureMatrix(room, freshMatrix) {
-        if (!this.structureMatrixCache[room.name] || (freshMatrix && Game.time !== this.structureMatrixTick)) {
-            this.structureMatrixTick = Game.time;
-            let matrix = new PathFinder.CostMatrix();
-            this.structureMatrixCache[room.name] = Traveler.addStructuresToMatrix(room, matrix, 1);
+    static getStructureMatrix(room, options) {
+        let roadcost = options.muscle && (options.ignoreRoads || options.offRoad) ? 2 : 1
+        if (!this.structureMatrixCache[room.name]) {
+            this.structureMatrixCache[room.name] = {}
         }
-        return this.structureMatrixCache[room.name];
+        if (!this.structureMatrixCache[room.name][roadcost] || (options.freshMatrix && Game.time !== this.structureMatrixTick)) {
+            let matrix = new PathFinder.CostMatrix();
+            this.structureMatrixCache[room.name][roadcost] = Traveler.addStructuresToMatrix(room, matrix, roadcost);
+        }
+        return this.structureMatrixCache[room.name][roadcost];
     }
     //build a cost matrix based on creeps and structures in the room. Will be cached for one tick. Requires vision.
     static getCreepMatrix(room) {
         if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick) {
             this.creepMatrixTick = Game.time;
-            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, true).clone());
+            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, {freshMatrix: true}).clone());
         }
         return this.creepMatrixCache[room.name];
     }
@@ -993,6 +1001,7 @@ Creep.prototype.Move = (function(target, range, priority, opts = {}) {
     opts.range = range;
     opts.priority = priority;
     Traveler.registerTarget(this, target, opts.range, opts.priority);
+    
     if (target.pos && target.pos.roomName !== this.room.name) {
         opts.preferHighway = true;
         opts.ensurePath = true;
