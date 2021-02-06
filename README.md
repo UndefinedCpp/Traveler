@@ -43,10 +43,10 @@ The file itself has comments, and you can also find documentation [in the wiki](
 
 ## Changelog
 2021-02-05
-*BUG FIX: Reported bug from the old traveler by msgerbs. Added room-level granularity to structure and creep matrix. Previously not all rooms requiring a cache update would update.
-*NEW: Added path caching and management. Paths are compressed to save memory space and are managed via user options. By default a max 1500 paths with a length of 5 moves or more are stored (you can change this in the options). Thanks to Muon for the [code snippets](https://github.com/bencbartlett/screeps-packrat) I stole and should be compatible with Muons snippets.
+* BUG FIX: Reported bug from the old traveler by msgerbs. Added room-level granularity to structure and creep matrix. Previously not all rooms requiring a cache update would update.
+* NEW: Added path caching and management. Paths are compressed to save memory space and are managed via user options. By default a max 1500 paths with a length of 5 moves or more are stored (you can change this in the options). Thanks to Muon for the [code snippets](https://github.com/bencbartlett/screeps-packrat) I stole and should be compatible with Muons snippets.
 
-2021-01-27 *Beta test
+2021-01-27
 * BUG FIX: Changed path finding logic. Pathfinder can only take whole numbers and traveler has been changed to reflect that. This is a beta test.. But so far so good. Please provide input if you see something off.
 * OPTIMIZATION: Added Options.heuristic
 * Two VERY minor speed optimizations
