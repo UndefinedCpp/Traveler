@@ -2,11 +2,13 @@
 Object.defineProperty(exports, "__esModule", {value: true});
 class Traveler {
     static travelTo(creep, destination, options = {}) {
-        // uncomment if you would like to register hostile rooms entered
-        // this is highly recommended
         if (!Memory.Traveler) {
             Memory.Traveler = {};
             Memory.Traveler.rooms = {};
+        }
+        if (global.TravelerPathCacheClean !== Game.time) {
+            global.TravelerPathCacheClean = Game.time
+            this.cleanCacheByUsage(1)
         }
         this.updateRoomStatus(creep.room);
         if (!destination) {
@@ -61,7 +63,7 @@ class Traveler {
         let state = this.deserializeState(travelData, destination);
         creep.memory._trav.lastMove = Game.time;
         // uncomment to visualize destination
-        // this.circle(destination.pos, "orange");
+        // this.circle(destination, "orange");
         // check if creep is stuck
         if (this.isStuck(creep, state)) {
             state.stuckCount++;
@@ -117,9 +119,17 @@ class Traveler {
             if (creep.spawning) {
                 return ERR_BUSY;
             }
+            let ret = {};
             state.destination = destination;
             let cpu = Game.cpu.getUsed();
-            let ret = this.findTravelPath(creep.pos, destination, options);
+            ret.path = this.getPath(creep.pos, destination, options.muscle);
+            if (!ret.path) {
+                ret = this.findTravelPath(creep.pos, destination, options);
+            } else {
+                travelData.path = ret.path
+                ret.incomplete = false;
+                //console.log(Game.shard.name + ' cached path retrieved in ' + (Game.cpu.getUsed()-cpu))
+            }
             let cpuUsed = Game.cpu.getUsed() - cpu;
             state.cpu = _.round(cpuUsed + state.cpu);
             if (state.cpu > REPORT_CPU_THRESHOLD) {
@@ -136,7 +146,12 @@ class Traveler {
             if (options.returnData) {
                 options.returnData.pathfinderReturn = ret;
             }
-            travelData.path = Traveler.serializePath(creep.pos, ret.path, color);
+            if (!travelData.path) {
+                travelData.path = Traveler.serializePath(creep.pos, ret.path, color);
+            }
+            if (travelData.path.length >= MIN_CACHED_PATH_LENGTH) {
+                this.addPath(creep.pos, destination, travelData.path, options.muscle);
+            }
             state.stuckCount = 0;
         }
         this.serializeState(creep, destination, state, travelData);
@@ -396,42 +411,6 @@ class Traveler {
         })
         return totalparts > 0 ? 0-totalreduction/totalparts : totalreduction;
     }
-    //gets a pos to a direction from a starting point
-    static getPosFromDirection(source, dir) {
-        let xoffset = 0;
-        let yoffset = 0;
-        switch (dir){
-            case TOP:
-                yoffset = 1;
-                break;
-            case TOP_RIGHT:
-                xoffset = 1;
-                yoffset = 1;
-                break;
-            case RIGHT:
-                xoffset = 1;
-                break;
-            case BOTTOM_RIGHT:
-                xoffset = 1;
-                yoffset = -1;
-                break;
-            case BOTTOM:
-                yoffset = -1;
-                break;
-            case BOTTOM_LEFT:
-                xoffset = -1;
-                yoffset = -1;
-                break;
-            case LEFT:
-                xoffset = -1;
-                break;
-            case TOP_LEFT:
-                xoffset = -1;
-                yoffset = 1;
-                break;
-        }
-        return new RoomPosition(source.x+xoffset, source.y+yoffset, source.roomName);
-    }
     //check if room should be avoided by findRoute algorithm
     static checkAvoid(roomName) {
         return Memory.Traveler.rooms[roomName] && Memory.Traveler.rooms[roomName].avoid
@@ -652,11 +631,16 @@ class Traveler {
     }
     //build a cost matrix based on structures in the room. Will be cached for more than one tick. Requires vision.
     static getStructureMatrix(room, options) {
-        let roadcost = options.muscle && (options.ignoreRoads || options.offRoad) ? 2 : 1
+        let roadcost = options && (options.muscle && (options.ignoreRoads || options.offRoad)) ? 2 : 1
+        if (!this.structureMatrixTick) {
+            this.structureMatrixTick = {};
+        }
+        
         if (!this.structureMatrixCache[room.name]) {
             this.structureMatrixCache[room.name] = {}
         }
-        if (!this.structureMatrixCache[room.name][roadcost] || (options.freshMatrix && Game.time !== this.structureMatrixTick)) {
+        if (!this.structureMatrixCache[room.name][roadcost] || ((options && options.freshMatrix) && Game.time !== this.structureMatrixTick[room.name])) {
+            this.structureMatrixTick[room.name] = Game.time;
             let matrix = new PathFinder.CostMatrix();
             this.structureMatrixCache[room.name][roadcost] = Traveler.addStructuresToMatrix(room, matrix, roadcost);
         }
@@ -664,8 +648,11 @@ class Traveler {
     }
     //build a cost matrix based on creeps and structures in the room. Will be cached for one tick. Requires vision.
     static getCreepMatrix(room) {
-        if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick) {
-            this.creepMatrixTick = Game.time;
+        if (!this.creepMatrixTick) {
+            this.creepMatrixTick = {};
+        }
+        if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick[room.name]) {
+            this.creepMatrixTick[room.name] = Game.time;
             this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, {freshMatrix: true}).clone());
         }
         return this.creepMatrixCache[room.name];
@@ -755,19 +742,6 @@ class Traveler {
             }
         }
         return false;
-    }
-    static getXYGridsFromRoomName(roomName) {
-        let [name,h,x,v,y] = roomName.match(/^([WE])([0-9]+)([NS])([0-9]+)$/);
-        x = (h == 'W') ? 0-x-1 : parseInt(x);
-		y = (v == 'S') ? 0-y-1 : parseInt(y);
-		return [x,y];
-    }
-    static getRoomNameFromWorldPosition(x, y) {
-        const long = y < 0 ? 'S' : 'N';
-        const lat = x < 0 ? 'W' : 'E';
-        const xpos = x < 0 ? 0-x-1 : x;
-        const ypos = y < 0 ? 0-y-1 : y;
-        return lat + xpos + long + ypos;
     }
     
     static updatePortals() {
@@ -888,7 +862,7 @@ class Traveler {
             }
         }
         
-        if (!xferroom) return false //probably need more portal intel to run this.. Tell the user
+        if (!xferroom) return false
         console.log('TRAVELER: ' + creep.name + ' found best move to ' + shard + ' destination of ' + room + ' through ' + nextShard  + ' - ' + nextRoom + ' cpu ' + (Game.cpu.getUsed()-count));
         creep.memory._trav.ISM = {currentShard: Game.shard.name, shard: shard, room: room, destShard: nextShard, xferRoom: xferroom, destRoom: nextRoom};
         return true
@@ -948,12 +922,166 @@ class Traveler {
         }
         return true
     }
+    static addPath(from, to, path, weight) {
+        if (!Memory.Traveler.pCache) {
+            Memory.Traveler.pCache = {};
+        }
+        var cache = Memory.Traveler.pCache;
+        var key = this.getPathKey(from, to)
+        var cachedPath = cache[key];
+        
+        var cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
+        if (cachedPath) {
+            if (cachedPath[cost]) return
+            cachedPath[cost] = this.packPath(path)
+            cachedPath.uses += 1
+        } else {
+            Memory.Traveler.pCache[key] = {
+                [cost]: this.packPath(path),
+                uses: 1
+            }
+        }
+    }
+    static getPath(from, to, weight) {
+        var cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
+        var cache = Memory.Traveler.pCache;
+        if (!cache) {
+            return;
+        }
+            
+        var key = this.getPathKey(from, to);
+        var cachedPath = cache[key];
+        if(cachedPath) {
+            cachedPath.uses += 1;
+            let path = this.unpackPath(cachedPath[cost]);
+            if (!path) return
+            if (!this.validatePath(from, path)) {
+                return
+            }
+            return path;
+        }
+    }
+    //checks a path to make sure it is still valid via cost matrix.
+    static validatePath(origin, path) {
+        let offsetX = [0, 0, 1, 1, 1, 0, -1, -1, -1];
+        let offsetY = [0, -1, -1, 0, 1, 1, 1, 0, -1];
+        let roomName = origin.roomName;
+        let room = Game.rooms[roomName];
+        let exits = Game.map.describeExits(roomName);
+        let x = origin.x;
+        let y = origin.y;
+        let matrix = this.getStructureMatrix(room);
+        
+        for (let i = 0; i < path.length; i ++) {
+            x += offsetX[path[i]];
+            y += offsetY[path[i]];
+            //if we are moving rooms
+            if(x < 0) { //left
+                x = 49;
+                roomName = exits[7];
+                room = Game.rooms[roomName];
+                if(!room) return true;
+                exits = Game.map.describeExits(roomName);
+                matrix = this.getStructureMatrix(room);
+            }
+            if (x > 49){ // right
+                x = 0;
+                roomName = exits[3];
+                room = Game.rooms[roomName];
+                if(!room) return true;
+                exits = Game.map.describeExits(roomName);
+                matrix = this.getStructureMatrix(room);
+            }
+            if(y < 0) { //up
+                y = 49;
+                roomName = exits[1];
+                room = Game.rooms[roomName];
+                if(!room) return true;
+                exits = Game.map.describeExits(roomName);
+                matrix = this.getStructureMatrix(room);
+            }
+            if (y > 49){ //down
+                y = 0;
+                roomName = exits[5];
+                room = Game.rooms[roomName];
+                if(!room) return true;
+                exits = Game.map.describeExits(roomName);
+                matrix = this.getStructureMatrix(room);
+            }
+            //console.log(roomName + ': ' + x + ',' + y)
+            if(matrix.get(x,y) >= 128) {
+                return false;
+            }
+        }
+        return true;
+    }
+//TODO: Disable logging
+    static cleanCacheByUsage(usage) {
+        if(Memory.Traveler.pCache && _.size(Memory.Traveler.pCache) <= MAX_CACHED_PATH_MEM_USAGE) {
+            return; //not above the limit
+        }
+        console.log('Cleaning path cache (usage == '+usage+')...');
+        var counter = 0;
+        for (var key in Memory.Traveler.pCache) {
+            if(Memory.Traveler.pCache[key].uses <= usage) {
+                delete Memory.Traveler.pCache[key];
+                counter += 1;
+            }
+        }
+        console.log('Path cache of usage '+usage+' cleaned! '+counter+' paths removed', 6 * 60);
+        this.cleanCacheByUsage(usage + 1);
+    }
+    static getPathKey(from, to) {
+        return this.getPosKey(from) + this.getPosKey(to);
+    }
+    static getPosKey(pos) {
+        return this.packCoord(pos) + this.packRoomName(pos.roomName)
+    }
+    //packrat functions, stolen from Muon (Overmind). Thanks!
+    static packCoord(coord) { return String.fromCharCode(((coord.x << 6) | coord.y) + 65);}
+    static packRoomName(roomName) {
+    	if (PERMACACHE._packedRoomNames[roomName] === undefined) {
+    		const coordinateRegex = /(E|W)(\d+)(N|S)(\d+)/g;
+    		const match = coordinateRegex.exec(roomName);
+    		const xDir = match[1];
+    		const x = Number(match[2]);
+    		const yDir = match[3];
+    		const y = Number(match[4]);
+    		let quadrant = xDir == 'W' ? yDir == 'N' ? 0 : 1 : yDir == 'N' ? 2 : 3
+    		// y is 6 bits, x is 6 bits, quadrant is 2 bits
+    		const num = (quadrant << 12 | (x << 6) | y) + 65;
+    		const char = String.fromCharCode(num);
+    		PERMACACHE._packedRoomNames[roomName] = char;
+    		PERMACACHE._unpackedRoomNames[char] = roomName;
+    	}
+    	return PERMACACHE._packedRoomNames[roomName];
+    }
+    static packPath(path) {
+        let hash = ''
+        for (let i = 0; i < path.length; i += 4) {
+            hash += String.fromCharCode(path.substr(i, 4))
+        }
+        return hash
+    }
+    static unpackPath(hash) {
+        if (!hash || hash.length === 0) return
+        let path = ''
+        for (let i = 0; i < hash.length; i++) {
+            path += Number(hash.charCodeAt(i))
+        }
+        return path
+    }
 }
 Traveler.structureMatrixCache = {};
 Traveler.creepMatrixCache = {};
+global.PERMACACHE = {}; // Create a permanent cache for immutable items such as room names..compatible with code bases running packrat
+PERMACACHE._packedRoomNames = PERMACACHE._packedRoomNames || {};
+PERMACACHE._unpackedRoomNames = PERMACACHE._unpackedRoomNames || {};
 exports.Traveler = Traveler;
 // this might be higher than you wish, setting it lower is a great way to diagnose creep behavior issues. When creeps
 // need to repath to often or they aren't finding valid paths, it can sometimes point to problems elsewhere in your code
+const MAX_CACHED_PATH_MEM_USAGE = 1500 // approx 100kb
+const MIN_CACHED_PATH_LENGTH = 5 // minimum path length to cache. Set to a very high value to stop caching.
 const REPORT_CPU_THRESHOLD = 1000;
 const DEFAULT_MAXOPS = 20000;
 const DEFAULT_STUCK_VALUE = 2;
