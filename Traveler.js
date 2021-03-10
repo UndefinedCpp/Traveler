@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", {value: true});
 class Traveler {
     static travelTo(creep, destination, options = {}) {
+        //this.updatePortals();
         if (!Memory.Traveler) {
             Memory.Traveler = {};
             Memory.Traveler.rooms = {};
@@ -34,22 +35,22 @@ class Traveler {
         
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
-        if (options.range && rangeToDestination <= options.range) {
-            if (!this.isExit(creep.pos)) {
+        if (!this.isExit(creep.pos)) {
+            if (options.range && rangeToDestination <= options.range) {
                 return OK;
             }
-        }
-        else if (rangeToDestination <= 1) {
-            if (rangeToDestination === 1 && !options.range) {
-                let direction = creep.pos.getDirectionTo(destination);
-                if (options.returnData) {
-                    options.returnData.nextPos = destination;
-                    options.returnData.path = direction.toString();
+            else if (rangeToDestination <= 1) {
+                if (rangeToDestination === 1 && !options.range) {
+                    let direction = creep.pos.getDirectionTo(destination);
+                    if (options.returnData) {
+                        options.returnData.nextPos = destination;
+                        options.returnData.path = direction.toString();
+                    }
+                    creep.memory._trav.lastMove = Game.time;
+                    return creep.move(direction);
                 }
-                creep.memory._trav.lastMove = Game.time;
-                return creep.move(direction);
+                return OK;
             }
-            return OK;
         }
         
         //get body movement Efficiency and adjust options automatically
@@ -429,6 +430,9 @@ class Traveler {
     }
     //draw a circle at position
     static circle(pos, color, opacity) {
+        if(Game.map.visual.getSize() >= 1000000) {
+            return
+        }
         new RoomVisual(pos.roomName).circle(pos, {
             radius: .45,
             fill: "transparent",
@@ -445,6 +449,8 @@ class Traveler {
         }
         if (!Memory.Traveler) {
             Memory.Traveler = {}
+        }
+        if (!Memory.Traveler.rooms) {
             Memory.Traveler.rooms = {}
         }
         if (!Memory.Traveler.rooms[room.name]) {
@@ -671,7 +677,7 @@ class Traveler {
                 continue;
                 //matrix.set(structure.pos.x, structure.pos.y, 5); //creeps can walk over containers. So this doesn't matter. Saving it just in case it breaks something
             } else {
-                impassibleStructures.push(structure);
+                matrix.set(structure.pos.x, structure.pos.y, 0xff);
             }
         }
         for (let site of room.find(FIND_MY_CONSTRUCTION_SITES)) {
@@ -679,9 +685,6 @@ class Traveler {
                 continue;
             }
             matrix.set(site.pos.x, site.pos.y, 0xff);
-        }
-        for (let structure of impassibleStructures) {
-            matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
         return matrix;
     }
@@ -692,6 +695,9 @@ class Traveler {
     }
     //serialize a path, traveler style. Returns a string of directions.
     static serializePath(startPos, path, color = "orange") {
+        if(Game.map.visual.getSize() >= 1000000) {
+            return
+        }
         let serializedPath = "";
         let lastPosition = startPos;
         this.circle(startPos, color);
@@ -747,6 +753,7 @@ class Traveler {
     static updatePortals() {
         //Set the public data segment to active
         RawMemory.setActiveForeignSegment('LeagueOfAutomatedNations', 97);
+        if (!RawMemory.foreignSegment.data) return false
         
         const data = JSON.parse(RawMemory.foreignSegment.data); //get the parsed data
         if (data.length < 10) {
@@ -754,15 +761,15 @@ class Traveler {
         }
         Memory.Traveler.Portals = {}
         for (const i in data) {
-            const room = data[i][0];
+            const room = this.packRoomName(data[i][0]);
             if (!Memory.Traveler.Portals[room]) {
                 Memory.Traveler.Portals[room] = {};
             }
-            if (data[i][1] === Game.shard.name) {
+            if (data[i][1] === Game.shard.name) { //portal to a room on same shard
                 if (!Memory.Traveler.Portals[room].rooms) {
                     Memory.Traveler.Portals[room].rooms = {};
                 }
-                Memory.Traveler.Portals[room].rooms[data[i][2]] = '';
+                Memory.Traveler.Portals[room].rooms[this.packRoomName(data[i][2])] = '';
             } else {
                 if (!Memory.Traveler.Portals[room].shards) {
                     Memory.Traveler.Portals[room].shards = {};
@@ -770,7 +777,7 @@ class Traveler {
                 if (!Memory.Traveler.Portals[room].shards[data[i][1]]) {
                     Memory.Traveler.Portals[room].shards[data[i][1]] = {};
                 }
-                Memory.Traveler.Portals[room].shards[data[i][1]][data[i][2]] = '';
+                Memory.Traveler.Portals[room].shards[data[i][1]][this.packRoomName(data[i][2])] = '';
             }
         }
         console.log('Retrieved all portal information for ' + Game.shard.name);
@@ -829,34 +836,37 @@ class Traveler {
         const shardPortals = Memory.Traveler.Portals;
         
         for (let xroom of xferRooms) {
-            if (!shardPortals[xroom] || !shardPortals[xroom].shards) {
+            let proom = this.packRoomName(xroom)
+            if (!shardPortals[proom] || !shardPortals[proom].shards) {
                 continue; //no shards in this rooms memory
             }
-            for (const destRoom in shardPortals[xroom].shards[shard]) {
+            for (const destRoom in shardPortals[proom].shards[shard]) {
+                let pdestRoom = this.unpackRoomName(destRoom)
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
-                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xroom) + Game.map.getRoomLinearDistance(destRoom, room);
+                const newdist = Game.map.getRoomLinearDistance(creep.room.name, xroom) + Game.map.getRoomLinearDistance(pdestRoom, room);
                 
                 //if better set our new room
                 if (newdist < dist) {
                     dist = newdist;
                     xferroom = xroom;
-                    nextRoom = destRoom;
+                    nextRoom = pdestRoom;
                     nextShard = shard;
                 }
             }
             if (shard === nearestShard) continue; //same shard, skip
             //and check ones for the next shard on the 'z axis' of the game
             for (const destRoom in shardPortals[xroom].shards[nearestShard]) {
+                let pdestRoom = this.unpackRoomName(destRoom)
                 //get the linear distance of travel from this room, to the transfer room, to the destination room, to the actual room number
                 //as of Dec 2020, shard 1 is the best place to make massive jumps due to the portals on shard0. We will attempt to get to that shard
                 //and then find the best portal to make the shortest path. Until then, we are just going to push to the nearest portal.
                 const newdist = ((Game.shard.name === 'shard3' || Game.shard.name === 'shard2') && shard === 'shard0') ? Game.map.getRoomLinearDistance(creep.room.name, xroom)
-                : Game.map.getRoomLinearDistance(creep.room.name, xroom, destRoom, room);
+                : Game.map.getRoomLinearDistance(creep.room.name, xroom, pdestRoom, room);
                 //if better set our new room
                 if (newdist < dist) {
                     dist = newdist;
                     xferroom = xroom;
-                    nextRoom = destRoom;
+                    nextRoom = pdestRoom;
                     nextShard = nearestShard;
                 }
             }
@@ -926,13 +936,12 @@ class Traveler {
         if (!Memory.Traveler.pCache) {
             Memory.Traveler.pCache = {};
         }
-        var cache = Memory.Traveler.pCache;
-        var key = this.getPathKey(from, to)
-        var cachedPath = cache[key];
+        let cache = Memory.Traveler.pCache;
+        let key = this.getPathKey(from, to)
+        let cachedPath = cache[key];
         
-        var cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
+        const cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
         if (cachedPath) {
-            if (cachedPath[cost]) return
             cachedPath[cost] = this.packPath(path)
             cachedPath.uses += 1
         } else {
@@ -943,19 +952,27 @@ class Traveler {
         }
     }
     static getPath(from, to, weight) {
-        var cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
-        var cache = Memory.Traveler.pCache;
+        const cost = weight >= 10 ? 2 : weight >= 2 ? 1 : 0;
+        let cache = Memory.Traveler.pCache;
         if (!cache) {
             return;
         }
             
-        var key = this.getPathKey(from, to);
-        var cachedPath = cache[key];
+        let key = this.getPathKey(from, to);
+        let cachedPath = cache[key];
         if(cachedPath) {
             cachedPath.uses += 1;
+            //clear and re get every 100 uses.
+            if (cachedPath.uses % 100 === 0) {
+                delete cachedPath[0]
+                delete cachedPath[1]
+                delete cachedPath[2]
+                return;
+            }
             let path = this.unpackPath(cachedPath[cost]);
             if (!path) return
             if (!this.validatePath(from, path)) {
+                delete cache[key]
                 return
             }
             return path;
@@ -973,6 +990,7 @@ class Traveler {
         let matrix = this.getStructureMatrix(room);
         
         for (let i = 0; i < path.length; i ++) {
+            if (path[i] < 1 || path[i] > 8) return false
             x += offsetX[path[i]];
             y += offsetY[path[i]];
             //if we are moving rooms
@@ -1008,7 +1026,6 @@ class Traveler {
                 exits = Game.map.describeExits(roomName);
                 matrix = this.getStructureMatrix(room);
             }
-            //console.log(roomName + ': ' + x + ',' + y)
             if(matrix.get(x,y) >= 128) {
                 return false;
             }
@@ -1017,19 +1034,18 @@ class Traveler {
     }
 //TODO: Disable logging
     static cleanCacheByUsage(usage) {
-        if(Memory.Traveler.pCache && _.size(Memory.Traveler.pCache) <= MAX_CACHED_PATH_MEM_USAGE) {
+        if(!Memory.Traveler.pCache || _.size(Memory.Traveler.pCache) <= MAX_CACHED_PATH_MEM_USAGE) {
             return; //not above the limit
         }
-        console.log('Cleaning path cache (usage == '+usage+')...');
-        var counter = 0;
-        for (var key in Memory.Traveler.pCache) {
+        let counter = 9999999;
+        for (const key in Memory.Traveler.pCache) {
             if(Memory.Traveler.pCache[key].uses <= usage) {
                 delete Memory.Traveler.pCache[key];
-                counter += 1;
+            } else if (Memory.Traveler.pCache[key].uses < counter){
+                counter = Memory.Traveler.pCache[key].uses;
             }
         }
-        console.log('Path cache of usage '+usage+' cleaned! '+counter+' paths removed', 6 * 60);
-        this.cleanCacheByUsage(usage + 1);
+        this.cleanCacheByUsage(counter);
     }
     static getPathKey(from, to) {
         return this.getPosKey(from) + this.getPosKey(to);
@@ -1056,6 +1072,36 @@ class Traveler {
     	}
     	return PERMACACHE._packedRoomNames[roomName];
     }
+    static unpackRoomName(char) {
+    	if (PERMACACHE._unpackedRoomNames[char] === undefined) {
+    		const num = char.charCodeAt(0) - 65;
+    		const { q, x, y } = {
+    			q: (num & 0b11000000111111) >>> 12,
+    			x: (num & 0b00111111000000) >>> 6,
+    			y: (num & 0b00000000111111),
+    		};
+    		let roomName;
+    		switch (q) {
+    			case 0:
+    				roomName = 'W' + x + 'N' + y;
+    				break;
+    			case 1:
+    				roomName = 'W' + x + 'S' + y;
+    				break;
+    			case 2:
+    				roomName = 'E' + x + 'N' + y;
+    				break;
+    			case 3:
+    				roomName = 'E' + x + 'S' + y;
+    				break;
+    			default:
+    				roomName = 'ERROR';
+    		}
+    		PERMACACHE._packedRoomNames[roomName] = char;
+    		PERMACACHE._unpackedRoomNames[char] = roomName;
+    	}
+    	return PERMACACHE._unpackedRoomNames[char];
+    }
     static packPath(path) {
         let hash = ''
         for (let i = 0; i < path.length; i += 4) {
@@ -1080,8 +1126,8 @@ PERMACACHE._unpackedRoomNames = PERMACACHE._unpackedRoomNames || {};
 exports.Traveler = Traveler;
 // this might be higher than you wish, setting it lower is a great way to diagnose creep behavior issues. When creeps
 // need to repath to often or they aren't finding valid paths, it can sometimes point to problems elsewhere in your code
-const MAX_CACHED_PATH_MEM_USAGE = 1500 // approx 100kb
-const MIN_CACHED_PATH_LENGTH = 5 // minimum path length to cache. Set to a very high value to stop caching.
+const MAX_CACHED_PATH_MEM_USAGE = 2000 // approx 100kb
+const MIN_CACHED_PATH_LENGTH = 999 // minimum path length to cache. Set to a very high value to stop caching.
 const REPORT_CPU_THRESHOLD = 1000;
 const DEFAULT_MAXOPS = 20000;
 const DEFAULT_STUCK_VALUE = 2;

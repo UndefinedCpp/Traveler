@@ -42,6 +42,13 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+2021-03-10
+* OPTIMIZATION: Minor speed optimizations
+* BUG FIX: Added a check to make sure map visuals are not near the limit prior to commanding a new visual. Don't ask me who used that entire bucket...
+* OPTIMIZATION: Packrat now added into portal caching.
+* BUG FIX: Fixed issue with cleaning up paths.
+* Path caching is now disabled by default. There is an issue where if a room massively changes road wise, creeps may use the cached path which is rendered less effective until an undate of that cache is called for. I will leave this up to the user until I think of a better solution.
+
 2021-02-05
 * BUG FIX: Reported bug from the old traveler by msgerbs. Added room-level granularity to structure and creep matrix. Previously not all rooms requiring a cache update would update.
 * NEW: Added path caching and management. Paths are compressed to save memory space and are managed via user options. By default a max 1500 paths with a length of 5 moves or more are stored (you can change this in the options). Thanks to Muon for the [code snippets](https://github.com/bencbartlett/screeps-packrat) I stole and should be compatible with Muons snippets.
