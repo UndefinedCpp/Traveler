@@ -2,7 +2,11 @@
 Object.defineProperty(exports, "__esModule", {value: true});
 class Traveler {
     static travelTo(creep, destination, options = {}) {
-        //this.updatePortals();
+        // initialize data object
+        if (!creep.memory._trav) {
+            delete creep.memory._travel;
+            creep.memory._trav = {};
+        }
         if (!Memory.Traveler) {
             Memory.Traveler = {};
             Memory.Traveler.rooms = {};
@@ -19,23 +23,16 @@ class Traveler {
             Traveler.circle(creep.pos, "aqua", .3);
             return ERR_TIRED;
         }
-        // initialize data object
-        if (!creep.memory._trav) {
-            delete creep.memory._travel;
-            creep.memory._trav = {};
-        }
-        const repathing = options.repathing ? options.repathing : false
-        if (creep.memory._trav.lastMove === Game.time && !repathing) {
+        if (creep.memory._trav.lastMove === Game.time) {
             return OK;
         }
         //initialize our options
         const range = options.range ? options.range : 1;
         const priority = options.priority ? options.priority : 1;
         destination = this.normalizePos(destination);
-        
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
-        if (!this.isExit(creep.pos)) {
+        if (!this.isExit(creep.pos) && destination.roomName === creep.pos.roomName) {
             if (options.range && rangeToDestination <= options.range) {
                 return OK;
             }
@@ -176,7 +173,7 @@ class Traveler {
         }
         
         //Don't push
-        if ((!(state.stuckCount > 0  || options.push)) || this.isExit(creep.pos)) {
+        if (!(state.stuckCount > 0 || options.push || this.isExit(creep.pos))) {
             return creep.move(nextDirection);
         }
         //Find if a creep is blocking our movement
@@ -186,8 +183,8 @@ class Traveler {
             if (!blocker.memory._trav || !blocker.memory._trav.target) {
                 //hasn't run yet... Lets swap in case the creep is idle
                 this.travelTo(blocker, creep.pos, {range: 0}); //swap
-                if (blocker._trav){
-                    blocker._trav.state[STATE_STUCK] = 999; //force repath in case it moved out of range
+                if (blocker.memory._trav){
+                    if (blocker.memory._trav.state) blocker.memory._trav.state[STATE_STUCK] = 999; //force repath in case it moved out of range
                 }
             } else {
                 if (blocker.memory._trav.lastMove < Game.time-2) { //blocker has not moved for 2 ticks.. Working or idle
@@ -238,7 +235,9 @@ class Traveler {
     //calls a same tick repath
     static repath(creep, destination, options) {
         creep.memory._trav.state[STATE_STUCK] = 999; //artificially set it to stuck and repath
-        return this.travelTo(creep, destination, options, {repath: true});
+        creep.memory._trav.lastMove = 0;
+        options.repath = 1;
+        return this.travelTo(creep, destination, options);
         
     }
     //Finds a new free position near the target and moves there
@@ -457,7 +456,7 @@ class Traveler {
             Memory.Traveler.rooms[room.name] = {}
         }
         if (room.controller) {
-            if (room.controller.owner && !room.controller.my) {
+            if ((room.controller.owner && !room.controller.my) || (room.controller.reservation && room.controller.reservation.username !== MY_USERNAME)) {
                 Memory.Traveler.rooms[room.name].avoid = 1
             } else {
                 delete Memory.Traveler.rooms[room.name].avoid
@@ -532,9 +531,24 @@ class Traveler {
             }
             return matrix;
         };
+        let range = options.range
+        //protect the user. make sure the range will not place them outside the target room.
+        //this can lead to invalid pathing or a creep pathing to a position outside the room
+        //the destination is in. We will compensate for that here.
+        if (origin.roomName !== destination.roomName && range > 1) {
+            if (destination.x + range > 48) {
+                range = destination.x === 49 ? 0 : 48 - destination.x
+            } else if (destination.y + range > 48) {
+                range = destination.x === 49 ? 0 : 48 - destination.y
+            } else if (range >= destination.x) {
+                range = destination.x > 0 ? destination.x-1 : 0
+            } else if (range >= destination.y) {
+                range = destination.y > 0 ? destination.y-1 : 0
+            }
+        }
         let ret = PathFinder.search(origin, {
             pos: destination,
-            range: options.range,
+            range: range,
         }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
@@ -667,13 +681,15 @@ class Traveler {
     static addStructuresToMatrix(room, matrix, roadCost) {
         let impassibleStructures = [];
         for (let structure of room.find(FIND_STRUCTURES)) {
-            if (structure instanceof StructureRampart) {
+            if (structure.structureType === STRUCTURE_RAMPART) {
                 if (!structure.my && !structure.isPublic) {
                     impassibleStructures.push(structure);
                 }
-            } else if (structure instanceof StructureRoad) {
-                matrix.set(structure.pos.x, structure.pos.y, roadCost);
-            } else if (structure instanceof StructureContainer) {
+            } else if (structure.structureType === STRUCTURE_ROAD) {
+                if (matrix.get(structure.pos.x, structure.pos.y) < 0xff) {
+                    matrix.set(structure.pos.x, structure.pos.y, roadCost);
+                }
+            } else if (structure.structureType === STRUCTURE_CONTAINER) {
                 continue;
                 //matrix.set(structure.pos.x, structure.pos.y, 5); //creeps can walk over containers. So this doesn't matter. Saving it just in case it breaks something
             } else {

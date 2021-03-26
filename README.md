@@ -42,6 +42,11 @@ Traveler is a general-purpose tool for moving your creeps around. This version i
 The file itself has comments, and you can also find documentation [in the wiki](https://github.com/crazydubc/Traveler/wiki). I'm also looking for feedback and collaboration to improve Traveler, pull requests welcome!
 
 ## Changelog
+2021-03-26
+* OPTIMIZATION: Creeps will now force a push if they are on an exit tile.
+* BUG FIX: Protection for the user added. Traveler will now verify the range passed will land the creep in the destination room. Previously if you passed a range, pathfinder would potentially path to a location in an adjacent room. Thanks ChewbaccaWarrior for the report!
+* Other minor bug fixes and optimizations reported by several users.
+
 2021-03-10
 * OPTIMIZATION: Minor speed optimizations
 * BUG FIX: Added a check to make sure map visuals are not near the limit prior to commanding a new visual. Don't ask me who used that entire bucket...
