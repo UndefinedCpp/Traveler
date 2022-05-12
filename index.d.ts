@@ -98,15 +98,15 @@ interface travelToOpts {
      * about the current situation, including pathfinder return results, next 
      * position, and its travel state. Default is `undefined`.
      */
-    travelData: Object;
+    travelData?: Object;
     /**
      * Limit how many rooms can be searched by PathFinder. Default is `undefined`.
      */
-    maxRooms: number;
+    maxRooms?: number;
     /**
      * Supply the route to be used by PathFinder. Default is `undefined`.
      */
-    route: Object;
+    route?: Object;
 }
 
 interface Creep {
